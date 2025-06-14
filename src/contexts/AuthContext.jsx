@@ -1,59 +1,71 @@
 // src/contexts/AuthContext.jsx
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import authService from '../services/authService'; // Bir önceki adımda oluşturduğumuz servis
+import authService from '../services/authService'; 
 
-// 1. Context'i oluştur
 const AuthContext = createContext(null);
 
-// 2. Provider Bileşenini Oluştur
 export const AuthProvider = ({ children }) => {
   const [userToken, setUserToken] = useState(null);
-  const [isLoading, setIsLoading] = useState(true); // Başlangıçta token kontrolü için yükleme durumu
+  const [userRoles, setUserRoles] = useState([]); 
+  const [isLoading, setIsLoading] = useState(true); 
 
-  // Uygulama ilk yüklendiğinde localStorage'dan token'ı kontrol et
   useEffect(() => {
     const token = authService.getCurrentToken();
+    const storedRoles = localStorage.getItem('userRoles'); 
+
     if (token) {
       setUserToken(token);
-      // İleride: Token'ın geçerliliğini backend'de doğrulamak daha iyi olur.
+      if (storedRoles) {
+        try {
+          setUserRoles(JSON.parse(storedRoles));
+        } catch (e) {
+          console.error("localStorage'dan roller parse edilirken hata:", e);
+          localStorage.removeItem('userRoles'); 
+        }
+      } else {
+        
+        console.warn("Token var ama localStorage'da userRoles bulunamadı.");
+      }
     }
-    setIsLoading(false); // Token kontrolü bitti
+    setIsLoading(false); 
   }, []);
 
-  // Login işlemi için fonksiyon
-  const loginContext = (token) => {
+  const loginContext = (token, roles = []) => { 
     setUserToken(token);
-    // localStorage.setItem('userToken', token); // Bu satır authService.login içinde zaten yapılıyor
+    setUserRoles(roles); 
+    localStorage.setItem('userToken', token);
+    localStorage.setItem('userRoles', JSON.stringify(roles)); 
   };
 
-  // Logout işlemi için fonksiyon
   const logoutContext = () => {
-    authService.logout(); // localStorage'dan token'ı siler
+    authService.logout(); 
+    localStorage.removeItem('userRoles'); 
     setUserToken(null);
+    setUserRoles([]); 
   };
 
-  // Context aracılığıyla paylaşılacak değerler
   const value = {
     userToken,
-    isAuthenticated: !!userToken, // userToken varsa true, yoksa false
-    isLoading, // Yükleme durumunu da paylaşabiliriz
+    userRoles, 
+    isAuthenticated: !!userToken,
+    isLoading,
     loginContext,
     logoutContext,
   };
 
   // Yükleme bitene kadar hiçbir şey render etme (veya bir yükleme göstergesi)
-  // Bu, sayfa ilk açıldığında token kontrol edilirken anlık bir "login değilmiş gibi" görünmeyi engeller.
   if (isLoading) {
-    return <div>Yükleniyor...</div>; // Basit bir yükleme göstergesi
+    // Daha iyi bir yükleme göstergesi eklenebilir.
+    return <div className="min-h-screen flex justify-center items-center text-xl font-semibold">Oturum kontrol ediliyor...</div>;
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// 3. Context'i kullanmak için özel bir hook
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
+    // Bu hata genellikle AuthProvider'ın uygulama ağacının tepesinde olmamasından kaynaklanır.
     throw new Error('useAuth hook, bir AuthProvider içinde kullanılmalıdır.');
   }
   return context;

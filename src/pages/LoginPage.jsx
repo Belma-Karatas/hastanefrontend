@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom'; // Link'i de import ettik
-import authService from '../services/authService';   // API servisimizi import ediyoruz
-import { useAuth } from '../contexts/AuthContext';     // Auth context'imizi import ediyoruz
+import { useNavigate, Link } from 'react-router-dom';
+import authService from '../services/authService';
+import { useAuth } from '../contexts/AuthContext';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
@@ -9,8 +9,8 @@ const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const navigate = useNavigate(); // Sayfa yönlendirmesi için hook
-  const { loginContext } = useAuth(); // AuthContext'ten login fonksiyonunu alıyoruz
+  const navigate = useNavigate();
+  const { loginContext } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -18,24 +18,34 @@ const LoginPage = () => {
     setLoading(true);
 
     try {
-      // authService.login fonksiyonuna { email, sifre } objesi gönderiyoruz
-      // Backend'deki LoginRequestDTO'nuzda alan adı "sifre" ise bu şekilde kalmalı.
       const data = await authService.login({ email: email, sifre: password });
 
       if (data && data.accessToken) {
-        // Başarılı login durumunda:
-        loginContext(data.accessToken); // AuthContext'i güncelle (token'ı sakla, isAuthenticated'ı true yap)
-        navigate('/dashboard');        // Kullanıcıyı dashboard'a yönlendir
+        let roles = [];
+        if (data.roles && Array.isArray(data.roles)) {
+            roles = data.roles;
+        } else if (data.authorities && Array.isArray(data.authorities)) {
+            roles = data.authorities.map(auth => typeof auth === 'string' ? auth : auth.authority).filter(Boolean);
+        }
+        
+        console.log("Alınan Roller (LoginPage):", roles); // Konsolda rolleri kontrol et
+        loginContext(data.accessToken, roles);
+
+        // Yönlendirme mantığı AppRoutes'a taşınacağı için burası basit kalabilir
+        // veya doğrudan role göre ilk yönlendirme yapılabilir.
+        // Şimdilik dashboard'a yönlendiriyoruz, AppRoutes daha sonra rol kontrolü yapacak.
+        navigate('/dashboard'); 
       } else {
-        // Backend'den token gelmediyse veya beklenmedik bir cevap varsa:
-        setError(data.message || 'Giriş başarısız oldu. Lütfen bilgilerinizi kontrol edin.');
+        setError(data.message || 'Giriş başarısız oldu. Yanıt formatı beklenmiyor.');
       }
     } catch (err) {
-      // API çağrısı sırasında bir hata oluşursa (örn: ağ hatası, 401, 500)
-      console.error("Login Hatası - LoginPage:", err); // Hatanın detayını konsola yazdır
-      setError(err.message || err.error || 'Giriş sırasında bir hata oluştu. Lütfen tekrar deneyin.');
+      console.error("Login Hatası - LoginPage:", err);
+      const errorMessage = 
+        (err.response && err.response.data && (typeof err.response.data === 'string' ? err.response.data : err.response.data.message || err.response.data.error)) || 
+        err.message || 
+        'Giriş sırasında bir hata oluştu. Lütfen tekrar deneyin.';
+      setError(errorMessage);
     } finally {
-      // İstek tamamlansın veya hata alınsın, yükleme durumunu false yap
       setLoading(false);
     }
   };
@@ -77,7 +87,7 @@ const LoginPage = () => {
               onChange={(e) => setEmail(e.target.value)}
               className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
               placeholder="eposta@adresiniz.com"
-              disabled={loading} // Yükleme sırasında inputları disable et
+              disabled={loading}
             />
           </div>
 
@@ -98,7 +108,7 @@ const LoginPage = () => {
               onChange={(e) => setPassword(e.target.value)}
               className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
               placeholder="Şifreniz"
-              disabled={loading} // Yükleme sırasında inputları disable et
+              disabled={loading}
             />
           </div>
 
@@ -117,8 +127,7 @@ const LoginPage = () => {
             </div>
 
             <div className="text-sm">
-              {/* Şimdilik bu linki basit bir # yapalım veya ileride bir sayfa oluştururuz */}
-              <Link to="#" className="font-medium text-indigo-600 hover:text-indigo-500">
+              <Link to="/forgot-password" /* Geçici olarak # yerine anlamlı bir link */ className="font-medium text-indigo-600 hover:text-indigo-500">
                 Şifreni mi unuttun?
               </Link>
             </div>
@@ -141,7 +150,6 @@ const LoginPage = () => {
 
         <p className="mt-8 text-center text-sm text-gray-600">
           Hesabınız yok mu?{' '}
-          {/* Şimdilik bu linki basit bir # yapalım veya ileride bir sayfa oluştururuz */}
           <Link to="/register" className="font-medium text-teal-600 hover:text-teal-700">
             Hemen Kayıt Olun
           </Link>
