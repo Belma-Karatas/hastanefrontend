@@ -1,15 +1,15 @@
 // src/services/authService.js
-import axios from 'axios';
+import axios from 'axios'; // Bu import, registerHasta veya login gibi diğer fonksiyonlar için gerekebilir.
+                           // Sadece token işlemleri içinse gerekmeyebilir.
 
-const API_URL = 'http://localhost:8080/api/'; // Temel API URL'sini /api/ olarak değiştirdik
+const API_URL = 'http://localhost:8080/api/'; // Bu da diğer fonksiyonlar için.
 
-// Login fonksiyonu
 const login = async (userData) => {
   try {
-    // login endpoint'i /api/auth/ altında
     const response = await axios.post(API_URL + 'auth/login', userData);
     if (response.data && response.data.accessToken) {
-      localStorage.setItem('userToken', response.data.accessToken);
+      // localStorage.setItem('userToken', response.data.accessToken); // Bu loginContext'e taşındı
+      // localStorage.setItem('userRoles', JSON.stringify(response.data.roles || [])); // Bu loginContext'e taşındı
     }
     return response.data;
   } catch (error) {
@@ -21,44 +21,34 @@ const login = async (userData) => {
   }
 };
 
-// YENİ: Hasta Kayıt fonksiyonu
-// Aldığı 'hastaData' parametresi backend'deki HastaKayitDTO'ya uygun olmalı
 const registerHasta = async (hastaData) => {
   try {
-    // Hasta kayıt endpoint'i /api/hastalar/ altında
     const response = await axios.post(API_URL + 'hastalar/register', hastaData);
-    // Başarılı kayıt sonrası backend'den gelen cevabı döndür
-    // Bu cevap genellikle oluşturulan hasta nesnesini veya bir başarı mesajını içerir.
     return response.data;
   } catch (error) {
-    // Hata durumunda
     if (error.response && error.response.data) {
-      // Backend'den gelen spesifik hata mesajını fırlat
-      // (örn: "Bu e-posta zaten kullanılıyor", "TC Kimlik No zaten kayıtlı")
-      throw error.response.data; 
+      throw error.response.data;
     } else {
-      // Genel ağ veya sunucu hatası
       throw new Error(error.message || 'Kayıt sırasında sunucuya bağlanırken bir hata oluştu.');
     }
   }
 };
 
-// Logout fonksiyonu
 const logout = () => {
   localStorage.removeItem('userToken');
+  localStorage.removeItem('userRoles'); // Rolleri de temizle
 };
 
-// Mevcut token'ı almak için bir yardımcı fonksiyon
 const getCurrentToken = () => {
   return localStorage.getItem('userToken');
 };
 
-// Servis objesi (dışa aktarılacak fonksiyonları içerir)
+// Dışa aktarılacak servis objesi
 const authService = {
   login,
-  registerHasta, // Yeni fonksiyonu buraya ekledik
-  logout,
-  getCurrentToken,
+  registerHasta,
+  logout,             // logout fonksiyonu burada olmalı
+  getCurrentToken,    // getCurrentToken fonksiyonu burada olmalı
 };
 
 export default authService;

@@ -1,14 +1,23 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom'; // Link'i ekledik
+import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 // Admin sayfalarını import et
-import AdminLayout from './layouts/AdminLayout'; // YENİ LAYOUT
-import AdminDashboardPage from './pages/admin/AdminDashboardPage'; // YENİ SAYFA
-// DepartmanYonetimiPage eklendiğinde buraya import edilecek
-// import DepartmanYonetimiPage from './pages/admin/DepartmanYonetimiPage';
+import AdminLayout from './layouts/AdminLayout';
+import AdminDashboardPage from './pages/admin/AdminDashboardPage';
+import DepartmanYonetimiPage from './pages/admin/DepartmanYonetimiPage';
+import BransYonetimiPage from './pages/admin/BransYonetimiPage';
+import PersonelYonetimiPage from './pages/admin/PersonelYonetimiPage';
+import DuyuruYonetimiPage from './pages/admin/DuyuruYonetimiPage';
+import IzinTuruYonetimiPage from './pages/admin/IzinTuruYonetimiPage';
+import IzinTalepYonetimiPage from './pages/admin/IzinTalepYonetimiPage';
+import VardiyaTanimlariPage from './pages/admin/VardiyaTanimlariPage';
+import PersonelVardiyalariPage from './pages/admin/PersonelVardiyalariPage';
+import IlacYonetimiPage from './pages/admin/IlacYonetimiPage';
+import KatYonetimiPage from './pages/admin/KatYonetimiPage';
+import YatakServisYonetimiPage from './pages/admin/YatakServisYonetimiPage'; // YENİ İMPORT
 
 // Korumalı bir yol bileşeni (Rol kontrolü eklendi)
 const ProtectedRoute = ({ children, requiredRole }) => {
@@ -22,12 +31,9 @@ const ProtectedRoute = ({ children, requiredRole }) => {
     return <Navigate to="/login" replace />;
   }
 
-  // Eğer bir rol gerekiyorsa ve kullanıcı o role sahip değilse
   if (requiredRole && !userRoles.includes(requiredRole)) {
     console.warn(`Yetkisiz erişim denemesi: ${requiredRole} rolü gerekli. Kullanıcının rolleri: ${userRoles.join(', ')}`);
-    // Yetkisiz kullanıcıları genel dashboard'a veya özel bir "Yetkisiz Erişim" sayfasına yönlendirebiliriz.
-    // Şimdilik genel dashboard'a yönlendirelim.
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/dashboard" replace />; // Veya uygun bir "Yetkisiz Erişim" sayfasına
   }
 
   return children;
@@ -58,6 +64,7 @@ const DashboardPage = () => {
   );
 };
 
+// Ana Uygulama Bileşeni
 function App() {
   return (
     <AuthProvider>
@@ -73,8 +80,6 @@ const AppRoutes = () => {
   const { isAuthenticated, isLoading, userRoles } = useAuth();
 
   if (isLoading) {
-    // Bu yükleme göstergesi AuthProvider içinde de var, burada tekrar gerek olmayabilir
-    // ama AppRoutes ilk render olduğunda AuthContext henüz hazır olmayabilir.
     return <div className="min-h-screen flex justify-center items-center text-xl font-semibold">Yönlendirme yapılıyor...</div>;
   }
 
@@ -83,6 +88,7 @@ const AppRoutes = () => {
 
   return (
     <Routes>
+      {/* Temel Rotalar */}
       <Route
         path="/login"
         element={isAuthenticated ? <Navigate to={defaultAuthenticatedPath} replace /> : <LoginPage />}
@@ -92,17 +98,17 @@ const AppRoutes = () => {
         element={isAuthenticated ? <Navigate to={defaultAuthenticatedPath} replace /> : <RegisterPage />}
       />
 
-      {/* Genel Dashboard (Admin olmayan ve giriş yapmış kullanıcılar için) */}
+      {/* Genel Kullanıcı Dashboard'u */}
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute> {/* Sadece giriş yapmış olması yeterli */}
+          <ProtectedRoute> {/* Sadece giriş yapmış olması yeterli, rol belirtilmedi */}
             <DashboardPage />
           </ProtectedRoute>
         }
       />
 
-      {/* Admin Rotaları */}
+      {/* Admin Korumalı Rotalar */}
       <Route
         path="/admin" // Ana admin yolu
         element={
@@ -112,16 +118,27 @@ const AppRoutes = () => {
         }
       >
         {/* AdminLayout içindeki <Outlet />'e render edilecek nested route'lar */}
-        <Route index element={<Navigate to="dashboard" replace />} /> {/* /admin -> /admin/dashboard */}
+        <Route index element={<Navigate to="dashboard" replace />} /> {/* /admin için varsayılan olarak dashboard'a yönlendir */}
         <Route path="dashboard" element={<AdminDashboardPage />} />
+        <Route path="departmanlar" element={<DepartmanYonetimiPage />} />
+        <Route path="branslar" element={<BransYonetimiPage />} />
+        <Route path="personel" element={<PersonelYonetimiPage />} />
+        <Route path="duyurular" element={<DuyuruYonetimiPage />} />
+        <Route path="izin-turleri" element={<IzinTuruYonetimiPage />} />
+        <Route path="izin-talepleri" element={<IzinTalepYonetimiPage />} />
+        <Route path="vardiya-tanimlari" element={<VardiyaTanimlariPage />} />
+        <Route path="personel-vardiyalari" element={<PersonelVardiyalariPage />} />
+        <Route path="ilaclar" element={<IlacYonetimiPage />} />
+        <Route path="katlar" element={<KatYonetimiPage />} />
+        <Route path="yatak-servis-yonetimi" element={<YatakServisYonetimiPage />} /> {/* YATAK VE SERVİS YÖNETİMİ ROTASI */}
         {/* 
-          Örnek Departman Yönetimi Rotası (henüz sayfası oluşturulmadı):
-          <Route path="departmanlar" element={<DepartmanYonetimiPage />} /> 
+          Oda ve Yatak yönetimi artık YatakServisYonetimiPage içinde ele alınacağı için
+          ayrı "/admin/odalar" ve "/admin/yataklar" rotalarına genellikle gerek kalmaz.
+          Eğer hala ayrı tutmak istersen, onları da buraya ekleyebilirsin.
         */}
-        {/* Diğer admin sayfaları buraya <Route path="..." element={...} /> olarak eklenecek */}
       </Route>
 
-      {/* Ana Sayfa Yönlendirmesi */}
+      {/* Uygulama Ana Sayfası Yönlendirmesi */}
       <Route
         path="/"
         element={
@@ -131,14 +148,15 @@ const AppRoutes = () => {
           />
         }
       />
-      {/* Bulunamayan Sayfalar İçin */}
+
+      {/* Bulunamayan Sayfalar İçin 404 Rotası */}
       <Route path="*" element={
         <div className="min-h-screen flex flex-col justify-center items-center bg-gray-100">
-          <div className="text-center">
+          <div className="text-center p-8 bg-white rounded-lg shadow-md">
             <h1 className="text-6xl font-bold text-red-500">404</h1>
             <p className="text-2xl font-semibold text-gray-700 mt-4">Sayfa Bulunamadı</p>
             <p className="text-gray-500 mt-2">Aradığınız sayfa mevcut değil veya taşınmış olabilir.</p>
-            <Link to="/" className="mt-6 inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition duration-150 ease-in-out">
+            <Link to="/" className="mt-6 inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-lg shadow transition duration-150 ease-in-out">
               Ana Sayfaya Dön
             </Link>
           </div>
