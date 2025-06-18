@@ -31,11 +31,9 @@ import RandevularimPage from './pages/hasta/RandevularimPage';
 // DOKTOR SAYFALARI
 import DoktorDashboardPage from './pages/doktor/DoktorDashboardPage';
 import DoktorRandevularimPage from './pages/doktor/DoktorRandevularimPage';
-import DoktorMuayenePage from './pages/doktor/DoktorMuayenePage'; // <<-- YENİ IMPORT
-
-// Zamanla eklenecek diğer doktor sayfaları:
-// import DoktorIzinTalepPage from './pages/doktor/DoktorIzinTalepPage';
-// import DoktorVardiyalarimPage from './pages/doktor/DoktorVardiyalarimPage';
+import DoktorMuayenePage from './pages/doktor/DoktorMuayenePage';
+import DoktorIzinTalepPage from './pages/doktor/DoktorIzinTalepPage';
+import DoktorVardiyalarimPage from './pages/doktor/DoktorVardiyalarimPage'; // <<<--- YENİ IMPORT (Vardiya)
 
 const ProtectedRoute = ({ children, requiredRole }) => {
   const { isAuthenticated, isLoading, userRoles } = useAuth();
@@ -105,9 +103,8 @@ const hastaMenuItems = [
 const doktorMenuItems = [
   { name: 'Gösterge Paneli', to: '/doktor/dashboard' },
   { name: 'Randevularım', to: '/doktor/randevularim' },
-  // Muayene sayfası direkt menüde olmayacak, randevudan geçilecek.
-  // { name: 'İzin Taleplerim', to: '/doktor/izin-taleplerim' },
-  // { name: 'Vardiyalarım', to: '/doktor/vardiyalarim' },
+  { name: 'İzin Taleplerim', to: '/doktor/izin-taleplerim' },
+  { name: 'Vardiyalarım', to: '/doktor/vardiyalarim' }, // <<<--- YENİ MENÜ ÖĞESİ (Vardiya)
 ];
 
 function App() {
@@ -214,11 +211,9 @@ const AppRoutes = () => {
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<DoktorDashboardPage />} />
         <Route path="randevularim" element={<DoktorRandevularimPage />} />
-        <Route path="muayene/:randevuId" element={<DoktorMuayenePage />} /> {/* <<-- YENİ EKLENEN ROTA */}
-        {/* 
+        <Route path="muayene/:randevuId" element={<DoktorMuayenePage />} />
         <Route path="izin-taleplerim" element={<DoktorIzinTalepPage />} />
-        <Route path="vardiyalarim" element={<DoktorVardiyalarimPage />} />
-        */}
+        <Route path="vardiyalarim" element={<DoktorVardiyalarimPage />} /> {/* <<<--- YENİ ROTA (Vardiya) */}
       </Route>
 
       <Route path="/" element={ <Navigate to={isAuthenticated ? defaultAuthenticatedPath : "/login"} replace /> } />

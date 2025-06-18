@@ -21,11 +21,19 @@ const updateAcilDurumKaydiDurumu = (id, durumGuncelleData) => {
   return apiClient.put(`/acildurumkayitlari/${id}/durum`, durumGuncelleData);
 };
 
+// --- YENİ FONKSİYON (Doktor Dashboard'u için) ---
+const getAktifVeMudahaleEdilenAcilDurumlarDoktor = () => {
+  // Bu, backend'deki /api/acildurumkayitlari/aktif-ve-mudahale endpoint'ini çağırır
+  return apiClient.get('/acildurumkayitlari/aktif-ve-mudahale');
+};
+// --- YENİ FONKSİYON SONU ---
+
 const acilDurumKaydiService = {
   getAllAcilDurumKayitlari,
   getAcilDurumKaydiById,
   createAcilDurumKaydi,
   updateAcilDurumKaydiDurumu,
+  getAktifVeMudahaleEdilenAcilDurumlarDoktor, // <<<--- YENİ FONKSİYONU EXPORT'A EKLE
 };
 
 export default acilDurumKaydiService;

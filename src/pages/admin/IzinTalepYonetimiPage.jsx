@@ -1,32 +1,34 @@
 // src/pages/admin/IzinTalepYonetimiPage.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import izinTalepService from '../../services/izinTalepService';
-import { format } from 'date-fns'; // Tarih formatlamak için
+import { format, parseISO, isValid } from 'date-fns'; // parseISO ve isValid eklendi
 
 const IzinTalepYonetimiPage = () => {
   const [izinTalepleri, setIzinTalepleri] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState(''); // Başarı mesajları için
-  const [filtreDurum, setFiltreDurum] = useState(''); // 'BEKLIYOR', 'ONAYLANDI', 'REDDEDILDI', '' (tümü)
+  const [successMessage, setSuccessMessage] = useState('');
+  const [filtreDurum, setFiltreDurum] = useState('');
 
   const fetchIzinTalepleri = useCallback(async () => {
     setIsLoading(true);
     setError('');
-    setSuccessMessage(''); // Yeni veri çekilirken başarı mesajını temizle
+    setSuccessMessage('');
     try {
       const params = {};
       if (filtreDurum) {
         params.durum = filtreDurum;
       }
-      const response = await izinTalepService.getAllIzinTalepleri(params);
-      setIzinTalepleri(response.data);
+      // DEĞİŞİKLİK BURADA: Fonksiyon adı düzeltildi
+      const response = await izinTalepService.getAllIzinTalepleriForAdmin(params); 
+      setIzinTalepleri(response.data || []); // response.data null ise boş array ata
     } catch (err) {
       console.error("İzin Talepleri getirilirken hata:", err);
       setError(err.response?.data?.message || err.message || 'İzin talepleri yüklenemedi.');
+      setIzinTalepleri([]); // Hata durumunda listeyi boşalt
     }
     setIsLoading(false);
-  }, [filtreDurum]); // filtreDurum değiştiğinde yeniden çalışsın
+  }, [filtreDurum]);
 
   useEffect(() => {
     fetchIzinTalepleri();
@@ -38,13 +40,14 @@ const IzinTalepYonetimiPage = () => {
       : `${personelAdi} adlı personelin izin talebini REDDETMEK istediğinizden emin misiniz?`;
 
     if (window.confirm(onayMesaji)) {
-      setIsLoading(true); // Butona özel loading state'i de düşünülebilir
+      setIsLoading(true); 
       setError('');
       setSuccessMessage('');
       try {
-        await izinTalepService.updateIzinTalepDurumu(talepId, { yeniDurum });
+        // DEĞİŞİKLİK BURADA: Fonksiyon adı düzeltildi (eğer servis dosyasında da bu isimle varsa)
+        await izinTalepService.updateIzinTalepDurumuForAdmin(talepId, { yeniDurum }); 
         setSuccessMessage(`Personel ${personelAdi}'in izin talebi başarıyla '${yeniDurum}' olarak güncellendi.`);
-        fetchIzinTalepleri(); // Listeyi yenile
+        fetchIzinTalepleri(); 
       } catch (err) {
         console.error("İzin talep durumu güncelleme hatası:", err);
         setError(err.response?.data?.message || err.message || 'Durum güncellenemedi.');
@@ -54,9 +57,9 @@ const IzinTalepYonetimiPage = () => {
   };
 
   const durumRenkleri = {
-    BEKLIYOR: 'bg-yellow-100 text-yellow-800',
-    ONAYLANDI: 'bg-green-100 text-green-800',
-    REDDEDILDI: 'bg-red-100 text-red-800',
+    BEKLIYOR: 'bg-yellow-100 text-yellow-800 border-yellow-400',
+    ONAYLANDI: 'bg-green-100 text-green-800 border-green-400',
+    REDDEDILDI: 'bg-red-100 text-red-800 border-red-400',
   };
 
   return (
@@ -86,38 +89,50 @@ const IzinTalepYonetimiPage = () => {
         <p className="text-center text-gray-500 py-4">Gösterilecek izin talebi bulunmamaktadır.</p>
       )}
 
-      {!isLoading && izinTalepleri.length > 0 && (
+      {!isLoading && !error && izinTalepleri.length > 0 && (
         <div className="overflow-x-auto bg-white rounded-lg shadow">
           <table className="min-w-full leading-normal">
             <thead>
               <tr>
-                <th className="px-3 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Personel</th>
-                <th className="px-3 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">İzin Türü</th>
-                <th className="px-3 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Başlangıç</th>
-                <th className="px-3 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Bitiş</th>
-                <th className="px-3 py-3 border-b-2 border-gray-200 bg-gray-100 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Gün</th>
-                <th className="px-3 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Talep Tarihi</th>
-                <th className="px-3 py-3 border-b-2 border-gray-200 bg-gray-100 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Durum</th>
-                <th className="px-3 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Onaylayan</th>
-                <th className="px-3 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">İşlemler</th>
+                <th className="th-style">Personel</th>
+                <th className="th-style">İzin Türü</th>
+                <th className="th-style">Başlangıç</th>
+                <th className="th-style">Bitiş</th>
+                <th className="th-style text-center">Gün</th>
+                <th className="th-style">Talep Tarihi</th>
+                <th className="th-style text-center">Durum</th>
+                <th className="th-style">Onaylayan</th>
+                <th className="th-style">İşlemler</th>
               </tr>
             </thead>
             <tbody>
               {izinTalepleri.map((talep) => (
                 <tr key={talep.id} className="hover:bg-gray-50">
-                  <td className="px-3 py-4 border-b border-gray-200 text-sm">{talep.talepEdenPersonelAdiSoyadi}</td>
-                  <td className="px-3 py-4 border-b border-gray-200 text-sm">{talep.izinTuruAdi}</td>
-                  <td className="px-3 py-4 border-b border-gray-200 text-sm">{format(new Date(talep.baslangicTarihi), 'dd.MM.yyyy')}</td>
-                  <td className="px-3 py-4 border-b border-gray-200 text-sm">{format(new Date(talep.bitisTarihi), 'dd.MM.yyyy')}</td>
-                  <td className="px-3 py-4 border-b border-gray-200 text-sm text-center">{talep.gunSayisi}</td>
-                  <td className="px-3 py-4 border-b border-gray-200 text-sm">{format(new Date(talep.talepTarihi), 'dd.MM.yyyy HH:mm')}</td>
-                  <td className="px-3 py-4 border-b border-gray-200 text-sm text-center">
-                    <span className={`px-2 py-1 font-semibold leading-tight rounded-full text-xs ${durumRenkleri[talep.durum] || 'bg-gray-100 text-gray-800'}`}>
+                  <td className="td-style">{talep.talepEdenPersonelAdiSoyadi}</td>
+                  <td className="td-style">{talep.izinTuruAdi}</td>
+                  <td className="td-style">
+                    {talep.baslangicTarihi && isValid(parseISO(talep.baslangicTarihi)) 
+                        ? format(parseISO(talep.baslangicTarihi), 'dd.MM.yyyy') 
+                        : 'N/A'}
+                  </td>
+                  <td className="td-style">
+                    {talep.bitisTarihi && isValid(parseISO(talep.bitisTarihi)) 
+                        ? format(parseISO(talep.bitisTarihi), 'dd.MM.yyyy') 
+                        : 'N/A'}
+                  </td>
+                  <td className="td-style text-center">{talep.gunSayisi}</td>
+                  <td className="td-style">
+                    {talep.talepTarihi && isValid(parseISO(talep.talepTarihi)) 
+                        ? format(parseISO(talep.talepTarihi), 'dd.MM.yyyy HH:mm') 
+                        : 'N/A'}
+                  </td>
+                  <td className="td-style text-center">
+                    <span className={`px-2 py-1 font-semibold leading-tight rounded-full text-xs border ${durumRenkleri[talep.durum] || 'bg-gray-100 text-gray-800 border-gray-300'}`}>
                       {talep.durum}
                     </span>
                   </td>
-                  <td className="px-3 py-4 border-b border-gray-200 text-sm">{talep.onaylayanYoneticiAdiSoyadi || '-'}</td>
-                  <td className="px-3 py-4 border-b border-gray-200 text-sm">
+                  <td className="td-style">{talep.onaylayanYoneticiAdiSoyadi || (talep.durum !== 'BEKLIYOR' ? 'Sistem/Admin' : '-')}</td>
+                  <td className="td-style">
                     {talep.durum === 'BEKLIYOR' && (
                       <div className="flex space-x-2">
                         <button

@@ -3,9 +3,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import katService from '../../services/katService';
 import odaService from '../../services/odaService';
 import yatakService from '../../services/yatakService';
-import yatisService from '../../services/yatisService'; // Yorumu kaldırdık
-import hastaService from '../../services/hastaService'; // Ekledik
-import personelService from '../../services/personelService'; // Ekledik
+import yatisService from '../../services/yatisService';
+import hastaService from '../../services/hastaService';
+import personelService from '../../services/personelService';
 // import { format, parseISO } from 'date-fns'; // Şu an için kullanılmıyor, gerekirse eklenir
 
 const YatakServisYonetimiPage = () => {
@@ -64,12 +64,24 @@ const YatakServisYonetimiPage = () => {
           hastaService.getAllHastalar(),
           personelService.getAllPersoneller()
         ]);
-        setKatlar(katRes.data);
+        setKatlar(katRes.data || []);
         setHastalarListesi(hastaRes.data || []);
-        const doktorlar = (personelRes.data || []).filter(p => 
-          p.kullanici?.roller?.some(r => r.ad === 'ROLE_DOKTOR')
+        
+        // Doktorları filtrele
+        const allPersonel = personelRes.data || [];
+        console.log("Tüm Personeller (YatakServis):", allPersonel); // Gelen tüm personeli logla
+        if (allPersonel.length > 0 && allPersonel[0].roller) {
+            console.log("İlk personelin rolleri tipi (YatakServis):", typeof allPersonel[0].roller, "Değeri:", allPersonel[0].roller);
+        }
+
+        const doktorlar = allPersonel.filter(p => 
+          p.roller && 
+          Array.isArray(p.roller) && 
+          p.roller.includes('ROLE_DOKTOR')
         );
+        console.log("Filtrelenmiş Doktorlar (YatakServis):", doktorlar);
         setDoktorlarListesi(doktorlar);
+
       } catch (err) { 
         console.error("Başlangıç verileri getirilirken hata:", err);
         setError(err.response?.data?.message || err.message || 'Veriler yüklenemedi.'); 
@@ -83,7 +95,7 @@ const YatakServisYonetimiPage = () => {
     if (!katId) { setOdalar([]); setSelectedOda(null); setYataklar([]); return; }
     setIsLoadingOdalar(true); clearMessages();
     try {
-      const response = await odaService.getAllOdalar(katId);
+      const response = await odaService.getAllOdalar(katId); // Backend'e katId gönderiliyor
       setOdalar(response.data || []); setSelectedOda(null); setYataklar([]);
     } catch (err) { 
       console.error(`Kat ${katId} için odalar getirilirken hata:`, err);
@@ -125,7 +137,7 @@ const YatakServisYonetimiPage = () => {
   const openOdaDuzenleModal = (oda) => { clearMessages(); resetOdaForm(); setEditOda(oda); setOdaFormData({ odaNumarasi: oda.odaNumarasi, kapasite: oda.kapasite }); setShowOdaModal(true); };
   const handleOdaFormInputChange = (e) => { const { name, value } = e.target; setOdaFormData(prev => ({ ...prev, [name]: value })); };
 
-  const handleOdaFormSubmit = async (e) => { /* ... önceki gibi ... */ 
+  const handleOdaFormSubmit = async (e) => { 
     e.preventDefault();
     if (!odaFormData.odaNumarasi.trim() || !odaFormData.kapasite) { setOdaFormError('Oda numarası ve kapasite boş olamaz.'); return; }
     const kapasiteNum = parseInt(odaFormData.kapasite, 10);
@@ -139,12 +151,12 @@ const YatakServisYonetimiPage = () => {
     } catch (err) { console.error("Oda işlemi hatası:", err); setOdaFormError(err.response?.data?.message || err.response?.data?.error || err.message || 'Oda işlemi sırasında bir hata oluştu.'); }
     setIsOdaFormLoading(false);
   };
-  const handleOdaSil = async (odaId, odaNumarasi) => { /* ... önceki gibi ... */ 
+  const handleOdaSil = async (odaId, odaNumarasi) => { 
     if (window.confirm(`'${odaNumarasi}' numaralı odayı silmek istediğinizden emin misiniz?`)) {
       setIsLoadingOdalar(true); clearMessages();
       try {
         await odaService.deleteOda(odaId); setOdaSuccessMessage(`'${odaNumarasi}' numaralı oda başarıyla silindi.`); fetchOdalarByKat(selectedKatId);
-        if(selectedOda?.id === odaId) setSelectedOda(null);
+        if(selectedOda?.id === odaId) setSelectedOda(null); // Silinen oda seçili ise seçimi kaldır
       } catch (err) { console.error("Oda silme hatası:", err); setOdaFormError(err.response?.data?.message || err.message || 'Oda silinemedi.'); }
       setIsLoadingOdalar(false);
     }
@@ -155,20 +167,20 @@ const YatakServisYonetimiPage = () => {
   const openYatakDuzenleModal = (yatak) => { clearMessages(); resetYatakForm(); setEditYatak(yatak); setYatakFormData({ yatakNumarasi: yatak.yatakNumarasi }); setShowYatakModal(true); };
   const handleYatakFormInputChange = (e) => { const { name, value } = e.target; setYatakFormData(prev => ({ ...prev, [name]: value })); };
   
-  const handleYatakFormSubmit = async (e) => { /* ... önceki gibi, payload'a doluMu eklendi ... */ 
+  const handleYatakFormSubmit = async (e) => { 
     e.preventDefault();
     if (!yatakFormData.yatakNumarasi.trim()) {
       setYatakFormError('Yatak numarası boş olamaz.'); return;
     }
     setIsYatakFormLoading(true); setYatakFormError(''); clearMessages();
-    const payload = { yatakNumarasi: yatakFormData.yatakNumarasi, odaId: selectedOda.id, };
+    const payload = { yatakNumarasi: yatakFormData.yatakNumarasi, odaId: selectedOda.id };
     try {
       if (editYatak) {
-        const updatePayload = { ...payload, doluMu: editYatak.doluMu }; // doluMu durumunu koru
+        const updatePayload = { ...payload, doluMu: editYatak.doluMu }; 
         await yatakService.updateYatak(editYatak.id, updatePayload);
         setYatakSuccessMessage(`'${payload.yatakNumarasi}' numaralı yatak başarıyla güncellendi.`);
       } else {
-        const createPayload = { ...payload, doluMu: false }; // Yeni yatak boş oluşturulur
+        const createPayload = { ...payload, doluMu: false }; 
         await yatakService.createYatak(createPayload);
         setYatakSuccessMessage(`'${payload.yatakNumarasi}' numaralı yatak başarıyla eklendi.`);
       }
@@ -176,7 +188,7 @@ const YatakServisYonetimiPage = () => {
     } catch (err) { console.error("Yatak işlemi hatası:", err); setYatakFormError(err.response?.data?.message || err.response?.data?.error || err.message || 'Yatak işlemi sırasında bir hata oluştu.');}
     setIsYatakFormLoading(false);
   };
-  const handleYatakSil = async (yatakId, yatakNumarasi) => { /* ... önceki gibi ... */ 
+  const handleYatakSil = async (yatakId, yatakNumarasi) => { 
     if (window.confirm(`Oda ${selectedOda?.odaNumarasi} içindeki '${yatakNumarasi}' numaralı yatağı silmek istediğinizden emin misiniz?`)) {
       setIsLoadingYataklar(true); clearMessages();
       try {
@@ -211,11 +223,11 @@ const YatakServisYonetimiPage = () => {
         setError("Bu yatakta taburcu edilecek aktif bir yatış bulunmuyor."); return; 
       }
       if (window.confirm(`${yatak.yatanHastaAdiSoyadi || 'Bilinmeyen Hasta'} adlı hastayı ${yatak.yatakNumarasi} numaralı yataktan taburcu etmek istediğinizden emin misiniz?`)) {
-        setIsLoadingYataklar(true); clearMessages();
+        setIsLoadingYataklar(true); clearMessages(); // Yatak listesi güncelleneceği için setIsLoadingYataklar kullanılabilir.
         try {
             await yatisService.hastaTaburcuEt(yatak.aktifYatisId);
             setYatisSuccessMessage("Hasta başarıyla taburcu edildi.");
-            fetchYataklarByOda(selectedOda.id);
+            fetchYataklarByOda(selectedOda.id); // Yatak listesini yenile
         } catch (err) { console.error("Taburcu etme hatası:", err); setError(err.response?.data?.message || err.response?.data?.error || err.message || 'Taburcu işlemi sırasında bir hata oluştu.');}
         setIsLoadingYataklar(false);
       }
@@ -339,7 +351,7 @@ const YatakServisYonetimiPage = () => {
                 <label htmlFor="sorumluDoktorId" className="block text-sm font-medium text-gray-700">Sorumlu Doktor Seçin</label>
                 <select name="sorumluDoktorId" id="sorumluDoktorId" value={yatisFormData.sorumluDoktorId} onChange={handleYatisFormInputChange} required className="mt-1 block w-full select-style" disabled={isYatisFormLoading || doktorlarListesi.length === 0}>
                   <option value="">-- Doktor Seçin --</option>
-                  {doktorlarListesi.map(d => <option key={d.id} value={d.id}>{d.ad} {d.soyad} ({d.doktorDetay?.brans?.ad || 'Branş Yok'})</option>)}
+                  {doktorlarListesi.map(d => <option key={d.id} value={d.id}>{d.ad} {d.soyad} ({d.bransAdi || 'Branş Yok'})</option>)}
                 </select>
                 {doktorlarListesi.length === 0 && !isLoadingKatlar && <p className="text-xs text-red-500 mt-1">Sistemde kayıtlı doktor bulunamadı.</p>}
               </div>
