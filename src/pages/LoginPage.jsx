@@ -10,7 +10,7 @@ const LoginPage = () => {
   const [error, setError] = useState('');
 
   const navigate = useNavigate();
-  const { loginContext } = useAuth();
+  const { loginContext } = useAuth(); // AuthContext'ten loginContext fonksiyonunu alıyoruz
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -19,24 +19,40 @@ const LoginPage = () => {
 
     try {
       const data = await authService.login({ email: email, sifre: password });
+      // data objesinin backend'deki LoginResponseDTO ile aynı yapıda olması beklenir:
+      // { accessToken, tokenType, roller, hastaId?, email?, kullaniciId? }
 
       if (data && data.accessToken) {
         let roles = [];
-        if (data.roles && Array.isArray(data.roles)) {
-            roles = data.roles;
-        } else if (data.authorities && Array.isArray(data.authorities)) {
-            roles = data.authorities.map(auth => typeof auth === 'string' ? auth : auth.authority).filter(Boolean);
+        // Backend'den gelen rollerin formatını kontrol et (List<String> olmalı)
+        if (data.roller && Array.isArray(data.roller)) {
+            roles = data.roller;
+        } else if (data.authorities && Array.isArray(data.authorities)) { // Spring Security varsayılanı
+            roles = data.authorities.map(auth => 
+                typeof auth === 'string' ? auth : (auth && auth.authority ? auth.authority : null)
+            ).filter(Boolean);
         }
         
-        console.log("Alınan Roller (LoginPage):", roles); // Konsolda rolleri kontrol et
-        loginContext(data.accessToken, roles);
+        const hastaId = data.hastaId || null;
+        const kullaniciEmail = data.email || email; // Email'i yanıttan al veya formdan kullan
+        const kullaniciId = data.kullaniciId || null;
 
-        // Yönlendirme mantığı AppRoutes'a taşınacağı için burası basit kalabilir
-        // veya doğrudan role göre ilk yönlendirme yapılabilir.
-        // Şimdilik dashboard'a yönlendiriyoruz, AppRoutes daha sonra rol kontrolü yapacak.
-        navigate('/dashboard'); 
+        console.log("LoginPage - Gelen Data:", data);
+        console.log("LoginPage - Alınan Roller:", roles);
+        console.log("LoginPage - Alınan Hasta ID:", hastaId);
+        console.log("LoginPage - Alınan Email:", kullaniciEmail);
+        console.log("LoginPage - Alınan Kullanıcı ID:", kullaniciId);
+        
+        // AuthContext'teki loginContext fonksiyonunu çağırarak kullanıcı bilgilerini set et
+        loginContext(data.accessToken, roles, hastaId, kullaniciEmail, kullaniciId);
+
+        // Yönlendirme App.jsx içindeki AppRoutes tarafından yapılacak.
+        // useNavigate() ile bir sonraki render döngüsünde yönlendirme gerçekleşir.
+        // Eğer hemen yönlendirme isteniyorsa navigate() çağrısı burada kalabilir.
+        // navigate('/dashboard'); // Bu satır yerine AppRoutes'un yönlendirmesine güvenmek daha iyi olabilir
+                                // Çünkü AppRoutes zaten isAuthenticated durumuna göre doğru yere yönlendirir.
       } else {
-        setError(data.message || 'Giriş başarısız oldu. Yanıt formatı beklenmiyor.');
+        setError(data?.message || 'Giriş başarısız oldu veya beklenmedik bir yanıt alındı.');
       }
     } catch (err) {
       console.error("Login Hatası - LoginPage:", err);
@@ -127,7 +143,7 @@ const LoginPage = () => {
             </div>
 
             <div className="text-sm">
-              <Link to="/forgot-password" /* Geçici olarak # yerine anlamlı bir link */ className="font-medium text-indigo-600 hover:text-indigo-500">
+              <Link to="/forgot-password" className="font-medium text-indigo-600 hover:text-indigo-500">
                 Şifreni mi unuttun?
               </Link>
             </div>

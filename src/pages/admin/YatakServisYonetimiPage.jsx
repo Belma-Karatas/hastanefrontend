@@ -3,8 +3,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import katService from '../../services/katService';
 import odaService from '../../services/odaService';
 import yatakService from '../../services/yatakService';
-// import yatisService from '../../services/yatisService'; // Yatış işlemleri eklendiğinde kullanılacak
-import { format, parseISO } from 'date-fns'; // Eğer tarih formatlama kullanıyorsanız
+import yatisService from '../../services/yatisService'; // Yorumu kaldırdık
+import hastaService from '../../services/hastaService'; // Ekledik
+import personelService from '../../services/personelService'; // Ekledik
+// import { format, parseISO } from 'date-fns'; // Şu an için kullanılmıyor, gerekirse eklenir
 
 const YatakServisYonetimiPage = () => {
   const [katlar, setKatlar] = useState([]);
@@ -14,13 +16,13 @@ const YatakServisYonetimiPage = () => {
   const [selectedOda, setSelectedOda] = useState(null);
   
   const [yataklar, setYataklar] = useState([]);
+  const [selectedYatakForYatis, setSelectedYatakForYatis] = useState(null);
 
   const [isLoadingKatlar, setIsLoadingKatlar] = useState(false);
   const [isLoadingOdalar, setIsLoadingOdalar] = useState(false);
   const [isLoadingYataklar, setIsLoadingYataklar] = useState(false);
-  const [error, setError] = useState(''); // Genel sayfa hataları
+  const [error, setError] = useState('');
   
-  // Oda Modalı State'leri
   const [showOdaModal, setShowOdaModal] = useState(false);
   const [editOda, setEditOda] = useState(null);
   const [odaFormData, setOdaFormData] = useState({ odaNumarasi: '', kapasite: 1 });
@@ -28,7 +30,6 @@ const YatakServisYonetimiPage = () => {
   const [odaFormError, setOdaFormError] = useState('');
   const [odaSuccessMessage, setOdaSuccessMessage] = useState('');
 
-  // Yatak Modalı State'leri
   const [showYatakModal, setShowYatakModal] = useState(false);
   const [editYatak, setEditYatak] = useState(null);
   const [yatakFormData, setYatakFormData] = useState({ yatakNumarasi: '' });
@@ -36,29 +37,54 @@ const YatakServisYonetimiPage = () => {
   const [yatakFormError, setYatakFormError] = useState('');
   const [yatakSuccessMessage, setYatakSuccessMessage] = useState('');
 
-  // 1. Katları Çek
+  const [showYatisModal, setShowYatisModal] = useState(false);
+  const [yatisFormData, setYatisFormData] = useState({ hastaId: '', sorumluDoktorId: '', yatisNedeni: '' });
+  const [isYatisFormLoading, setIsYatisFormLoading] = useState(false);
+  const [yatisFormError, setYatisFormError] = useState('');
+  const [yatisSuccessMessage, setYatisSuccessMessage] = useState('');
+  const [hastalarListesi, setHastalarListesi] = useState([]);
+  const [doktorlarListesi, setDoktorlarListesi] = useState([]);
+
+  const clearMessages = () => {
+    setError('');
+    setOdaSuccessMessage('');
+    setYatakSuccessMessage('');
+    setYatisSuccessMessage('');
+    setOdaFormError('');
+    setYatakFormError('');
+    setYatisFormError('');
+  };
+
   useEffect(() => {
-    const fetchKatlar = async () => {
-      setIsLoadingKatlar(true); setError('');
+    const fetchInitialData = async () => {
+      setIsLoadingKatlar(true); clearMessages();
       try {
-        const response = await katService.getAllKatlar();
-        setKatlar(response.data);
+        const [katRes, hastaRes, personelRes] = await Promise.all([
+          katService.getAllKatlar(),
+          hastaService.getAllHastalar(),
+          personelService.getAllPersoneller()
+        ]);
+        setKatlar(katRes.data);
+        setHastalarListesi(hastaRes.data || []);
+        const doktorlar = (personelRes.data || []).filter(p => 
+          p.kullanici?.roller?.some(r => r.ad === 'ROLE_DOKTOR')
+        );
+        setDoktorlarListesi(doktorlar);
       } catch (err) { 
-        console.error("Katlar getirilirken hata:", err);
-        setError(err.response?.data?.message || err.message || 'Katlar yüklenemedi.'); 
+        console.error("Başlangıç verileri getirilirken hata:", err);
+        setError(err.response?.data?.message || err.message || 'Veriler yüklenemedi.'); 
       }
       setIsLoadingKatlar(false);
     };
-    fetchKatlar();
+    fetchInitialData();
   }, []);
 
-  // 2. Seçili Kat Değiştiğinde Odaları Çek
   const fetchOdalarByKat = useCallback(async (katId) => {
     if (!katId) { setOdalar([]); setSelectedOda(null); setYataklar([]); return; }
-    setIsLoadingOdalar(true); setError(''); setOdaFormError(''); setOdaSuccessMessage('');
+    setIsLoadingOdalar(true); clearMessages();
     try {
       const response = await odaService.getAllOdalar(katId);
-      setOdalar(response.data); setSelectedOda(null); setYataklar([]);
+      setOdalar(response.data || []); setSelectedOda(null); setYataklar([]);
     } catch (err) { 
       console.error(`Kat ${katId} için odalar getirilirken hata:`, err);
       setError(err.response?.data?.message || err.message || 'Odalar yüklenemedi.'); 
@@ -68,22 +94,16 @@ const YatakServisYonetimiPage = () => {
   }, []);
 
   useEffect(() => {
-    if (selectedKatId) {
-      fetchOdalarByKat(selectedKatId);
-    } else {
-      setOdalar([]); // Kat seçimi kaldırılırsa odaları temizle
-      setSelectedOda(null); // Ve seçili odayı
-      setYataklar([]); // Ve yatakları
-    }
+    if (selectedKatId) { fetchOdalarByKat(selectedKatId);
+    } else { setOdalar([]); setSelectedOda(null); setYataklar([]); }
   }, [selectedKatId, fetchOdalarByKat]);
 
-  // 3. Seçili Oda Değiştiğinde Yatakları Çek
   const fetchYataklarByOda = useCallback(async (odaId) => {
     if (!odaId) { setYataklar([]); return; }
-    setIsLoadingYataklar(true); setError(''); setYatakFormError(''); setYatakSuccessMessage('');
+    setIsLoadingYataklar(true); clearMessages();
     try {
       const response = await yatakService.getYataklarByOdaId(odaId);
-      setYataklar(response.data);
+      setYataklar(response.data || []);
     } catch (err) { 
       console.error(`Oda ${odaId} için yataklar getirilirken hata:`, err);
       setError(err.response?.data?.message || err.message || 'Yataklar yüklenemedi.'); 
@@ -93,28 +113,24 @@ const YatakServisYonetimiPage = () => {
   }, []);
 
   useEffect(() => { 
-    if (selectedOda) { 
-      fetchYataklarByOda(selectedOda.id); 
-    } else { 
-      setYataklar([]); 
-    } 
+    if (selectedOda) { fetchYataklarByOda(selectedOda.id); } 
+    else { setYataklar([]); } 
   }, [selectedOda, fetchYataklarByOda]);
 
-  const handleKatChange = (e) => setSelectedKatId(e.target.value);
-  const handleOdaSec = (oda) => setSelectedOda(oda);
+  const handleKatChange = (e) => { clearMessages(); setSelectedKatId(e.target.value); };
+  const handleOdaSec = (oda) => { clearMessages(); setSelectedOda(oda); };
   
-  // --- ODA MODALI FONKSİYONLARI ---
-  const resetOdaForm = () => { setOdaFormData({ odaNumarasi: '', kapasite: 1 }); setEditOda(null); setOdaFormError(''); setOdaSuccessMessage(''); };
-  const openOdaEkleModal = () => { if (!selectedKatId) { setError("Lütfen önce bir kat seçin."); return; } resetOdaForm(); setShowOdaModal(true); };
-  const openOdaDuzenleModal = (oda) => { resetOdaForm(); setEditOda(oda); setOdaFormData({ odaNumarasi: oda.odaNumarasi, kapasite: oda.kapasite }); setShowOdaModal(true); };
+  const resetOdaForm = () => { setOdaFormData({ odaNumarasi: '', kapasite: 1 }); setEditOda(null); setOdaFormError(''); };
+  const openOdaEkleModal = () => { if (!selectedKatId) { setError("Lütfen önce bir kat seçin."); return; } clearMessages(); resetOdaForm(); setShowOdaModal(true); };
+  const openOdaDuzenleModal = (oda) => { clearMessages(); resetOdaForm(); setEditOda(oda); setOdaFormData({ odaNumarasi: oda.odaNumarasi, kapasite: oda.kapasite }); setShowOdaModal(true); };
   const handleOdaFormInputChange = (e) => { const { name, value } = e.target; setOdaFormData(prev => ({ ...prev, [name]: value })); };
 
-  const handleOdaFormSubmit = async (e) => {
+  const handleOdaFormSubmit = async (e) => { /* ... önceki gibi ... */ 
     e.preventDefault();
     if (!odaFormData.odaNumarasi.trim() || !odaFormData.kapasite) { setOdaFormError('Oda numarası ve kapasite boş olamaz.'); return; }
     const kapasiteNum = parseInt(odaFormData.kapasite, 10);
     if (isNaN(kapasiteNum) || kapasiteNum <= 0) { setOdaFormError('Kapasite pozitif bir sayı olmalıdır.'); return; }
-    setIsOdaFormLoading(true); setOdaFormError(''); setOdaSuccessMessage('');
+    setIsOdaFormLoading(true); setOdaFormError(''); clearMessages();
     const payload = { odaNumarasi: odaFormData.odaNumarasi, kapasite: kapasiteNum, katId: parseInt(selectedKatId) };
     try {
       if (editOda) { await odaService.updateOda(editOda.id, payload); setOdaSuccessMessage(`'${payload.odaNumarasi}' odası başarıyla güncellendi.`); }
@@ -123,10 +139,9 @@ const YatakServisYonetimiPage = () => {
     } catch (err) { console.error("Oda işlemi hatası:", err); setOdaFormError(err.response?.data?.message || err.response?.data?.error || err.message || 'Oda işlemi sırasında bir hata oluştu.'); }
     setIsOdaFormLoading(false);
   };
-
-  const handleOdaSil = async (odaId, odaNumarasi) => {
+  const handleOdaSil = async (odaId, odaNumarasi) => { /* ... önceki gibi ... */ 
     if (window.confirm(`'${odaNumarasi}' numaralı odayı silmek istediğinizden emin misiniz?`)) {
-      setIsLoadingOdalar(true); setOdaFormError(''); setOdaSuccessMessage('');
+      setIsLoadingOdalar(true); clearMessages();
       try {
         await odaService.deleteOda(odaId); setOdaSuccessMessage(`'${odaNumarasi}' numaralı oda başarıyla silindi.`); fetchOdalarByKat(selectedKatId);
         if(selectedOda?.id === odaId) setSelectedOda(null);
@@ -135,77 +150,87 @@ const YatakServisYonetimiPage = () => {
     }
   };
 
-  // --- YATAK MODALI FONKSİYONLARI ---
-  const resetYatakForm = () => { setYatakFormData({ yatakNumarasi: '' }); setEditYatak(null); setYatakFormError(''); setYatakSuccessMessage(''); };
-  const openYatakEkleModal = () => { if (!selectedOda) { setError("Önce bir oda seçin."); return; } resetYatakForm(); setShowYatakModal(true); };
-  const openYatakDuzenleModal = (yatak) => { resetYatakForm(); setEditYatak(yatak); setYatakFormData({ yatakNumarasi: yatak.yatakNumarasi }); setShowYatakModal(true); };
+  const resetYatakForm = () => { setYatakFormData({ yatakNumarasi: '' }); setEditYatak(null); setYatakFormError(''); };
+  const openYatakEkleModal = () => { if (!selectedOda) { setError("Önce bir oda seçin."); return; } clearMessages(); resetYatakForm(); setShowYatakModal(true); };
+  const openYatakDuzenleModal = (yatak) => { clearMessages(); resetYatakForm(); setEditYatak(yatak); setYatakFormData({ yatakNumarasi: yatak.yatakNumarasi }); setShowYatakModal(true); };
   const handleYatakFormInputChange = (e) => { const { name, value } = e.target; setYatakFormData(prev => ({ ...prev, [name]: value })); };
-
-  const handleYatakFormSubmit = async (e) => {
+  
+  const handleYatakFormSubmit = async (e) => { /* ... önceki gibi, payload'a doluMu eklendi ... */ 
     e.preventDefault();
     if (!yatakFormData.yatakNumarasi.trim()) {
-      setYatakFormError('Yatak numarası boş olamaz.');
-      return;
+      setYatakFormError('Yatak numarası boş olamaz.'); return;
     }
-    setIsYatakFormLoading(true);
-    setYatakFormError('');
-    setYatakSuccessMessage('');
-
-    const payload = {
-      yatakNumarasi: yatakFormData.yatakNumarasi,
-      odaId: selectedOda.id,
-    };
-
+    setIsYatakFormLoading(true); setYatakFormError(''); clearMessages();
+    const payload = { yatakNumarasi: yatakFormData.yatakNumarasi, odaId: selectedOda.id, };
     try {
       if (editYatak) {
-        // Düzenleme sırasında doluMu durumu payload'a eklenip eklenmeyeceği backend DTO'suna bağlı.
-        // Genellikle yatak düzenleme doluMu'yu değiştirmez.
-        // Eğer backend YatakDTO'su update için doluMu bekliyorsa ve mevcut değeri korumak istiyorsanız:
-        // payload.doluMu = editYatak.doluMu; 
-        await yatakService.updateYatak(editYatak.id, payload);
+        const updatePayload = { ...payload, doluMu: editYatak.doluMu }; // doluMu durumunu koru
+        await yatakService.updateYatak(editYatak.id, updatePayload);
         setYatakSuccessMessage(`'${payload.yatakNumarasi}' numaralı yatak başarıyla güncellendi.`);
       } else {
-        // Yeni yatak eklerken doluMu: false gönderiyoruz.
-        // Backend'deki YatakDTO'da doluMu alanı create için @NotNull ise bu gereklidir.
-        const createPayload = { ...payload, doluMu: false };
+        const createPayload = { ...payload, doluMu: false }; // Yeni yatak boş oluşturulur
         await yatakService.createYatak(createPayload);
         setYatakSuccessMessage(`'${payload.yatakNumarasi}' numaralı yatak başarıyla eklendi.`);
       }
-      setShowYatakModal(false);
-      fetchYataklarByOda(selectedOda.id); // Yatak listesini yenile
-    } catch (err) {
-      console.error("Yatak işlemi hatası:", err);
-      setYatakFormError(err.response?.data?.message || err.response?.data?.error || err.message || 'Yatak işlemi sırasında bir hata oluştu.');
-    }
+      setShowYatakModal(false); fetchYataklarByOda(selectedOda.id);
+    } catch (err) { console.error("Yatak işlemi hatası:", err); setYatakFormError(err.response?.data?.message || err.response?.data?.error || err.message || 'Yatak işlemi sırasında bir hata oluştu.');}
     setIsYatakFormLoading(false);
   };
-
-  const handleYatakSil = async (yatakId, yatakNumarasi) => {
+  const handleYatakSil = async (yatakId, yatakNumarasi) => { /* ... önceki gibi ... */ 
     if (window.confirm(`Oda ${selectedOda?.odaNumarasi} içindeki '${yatakNumarasi}' numaralı yatağı silmek istediğinizden emin misiniz?`)) {
-      setIsLoadingYataklar(true); setYatakFormError(''); setYatakSuccessMessage('');
+      setIsLoadingYataklar(true); clearMessages();
       try {
-        await yatakService.deleteYatak(yatakId);
-        setYatakSuccessMessage(`'${yatakNumarasi}' numaralı yatak başarıyla silindi.`);
-        fetchYataklarByOda(selectedOda.id);
-      } catch (err) {
-        console.error("Yatak silme hatası:", err);
-        setYatakFormError(err.response?.data?.message || err.message || 'Yatak silinemedi.');
-      }
+        await yatakService.deleteYatak(yatakId); setYatakSuccessMessage(`'${yatakNumarasi}' numaralı yatak başarıyla silindi.`); fetchYataklarByOda(selectedOda.id);
+      } catch (err) { console.error("Yatak silme hatası:", err); setYatakFormError(err.response?.data?.message || err.message || 'Yatak silinemedi.');}
       setIsLoadingYataklar(false);
     }
   };
 
+  const resetYatisForm = () => { setYatisFormData({ hastaId: '', sorumluDoktorId: '', yatisNedeni: '' }); setSelectedYatakForYatis(null); setYatisFormError(''); };
+  const openYatisYapModal = (yatak) => { if (yatak.doluMu) { setError("Bu yatak zaten dolu, yeni yatış yapılamaz."); return; } clearMessages(); resetYatisForm(); setSelectedYatakForYatis(yatak); setShowYatisModal(true); };
+  const handleYatisFormInputChange = (e) => { const { name, value } = e.target; setYatisFormData(prev => ({ ...prev, [name]: value })); };
+
+  const handleYatisYapSubmit = async (e) => {
+    e.preventDefault();
+    if (!yatisFormData.hastaId || !yatisFormData.sorumluDoktorId || !yatisFormData.yatisNedeni.trim()) {
+      setYatisFormError('Lütfen hasta, sorumlu doktor seçin ve yatış nedenini girin.'); return;
+    }
+    if (!selectedYatakForYatis) { setYatisFormError('Yatış yapılacak yatak seçilemedi.'); return; }
+    setIsYatisFormLoading(true); setYatisFormError(''); clearMessages();
+    const payload = { ...yatisFormData, yatakId: selectedYatakForYatis.id };
+    try {
+      await yatisService.hastaYatisiYap(payload);
+      setYatisSuccessMessage(`Hasta başarıyla ${selectedYatakForYatis.yatakNumarasi} numaralı yatağa yatırıldı.`);
+      setShowYatisModal(false); fetchYataklarByOda(selectedOda.id);
+    } catch (err) { console.error("Yatış işlemi hatası:", err); setYatisFormError(err.response?.data?.message || err.response?.data?.error || err.message || 'Yatış işlemi sırasında bir hata oluştu.');}
+    setIsYatisFormLoading(false);
+  };
+  
+  const handleTaburcuEt = async (yatak) => {
+      if (!yatak.doluMu || !yatak.aktifYatisId) { 
+        setError("Bu yatakta taburcu edilecek aktif bir yatış bulunmuyor."); return; 
+      }
+      if (window.confirm(`${yatak.yatanHastaAdiSoyadi || 'Bilinmeyen Hasta'} adlı hastayı ${yatak.yatakNumarasi} numaralı yataktan taburcu etmek istediğinizden emin misiniz?`)) {
+        setIsLoadingYataklar(true); clearMessages();
+        try {
+            await yatisService.hastaTaburcuEt(yatak.aktifYatisId);
+            setYatisSuccessMessage("Hasta başarıyla taburcu edildi.");
+            fetchYataklarByOda(selectedOda.id);
+        } catch (err) { console.error("Taburcu etme hatası:", err); setError(err.response?.data?.message || err.response?.data?.error || err.message || 'Taburcu işlemi sırasında bir hata oluştu.');}
+        setIsLoadingYataklar(false);
+      }
+  };
 
   return (
     <div className="container mx-auto px-4 py-8 bg-white bg-opacity-90 rounded-lg shadow-xl">
       <h1 className="text-3xl font-bold text-gray-800 mb-8">Yatak ve Servis Operasyonları</h1>
 
-      {isLoadingKatlar && <p className="text-gray-600 py-2">Katlar yükleniyor...</p>}
-      {error && <p className="text-red-500 bg-red-100 p-3 rounded-md my-4">{error}</p>}
-      {odaSuccessMessage && <p className="text-green-600 bg-green-100 p-3 rounded-md my-4">{odaSuccessMessage}</p>}
-      {yatakSuccessMessage && <p className="text-green-600 bg-green-100 p-3 rounded-md my-4">{yatakSuccessMessage}</p>}
+      {isLoadingKatlar && <p className="text-center text-gray-600 py-2">Katlar yükleniyor...</p>}
+      {error && <p className="text-center text-red-500 bg-red-100 p-3 rounded-md my-4">{error}</p>}
+      {odaSuccessMessage && <p className="text-center text-green-600 bg-green-100 p-3 rounded-md my-4">{odaSuccessMessage}</p>}
+      {yatakSuccessMessage && <p className="text-center text-green-600 bg-green-100 p-3 rounded-md my-4">{yatakSuccessMessage}</p>}
+      {yatisSuccessMessage && <p className="text-center text-green-600 bg-green-100 p-3 rounded-md my-4">{yatisSuccessMessage}</p>}
 
-      {/* Kat Seçimi */}
       {!isLoadingKatlar && katlar.length > 0 && (
         <div className="mb-6 p-4 bg-gray-50 rounded-lg shadow">
           <label htmlFor="katSecimi" className="block text-lg font-semibold text-gray-700 mb-2">Kat Seçiniz</label>
@@ -215,9 +240,8 @@ const YatakServisYonetimiPage = () => {
           </select>
         </div>
       )}
-      {!isLoadingKatlar && katlar.length === 0 && !error && (<p className="text-gray-500 text-center py-4">Sistemde kayıtlı kat bulunmamaktadır. Lütfen önce Kat Yönetimi sayfasından kat ekleyiniz.</p>)}
+      {!isLoadingKatlar && katlar.length === 0 && !error && (<p className="text-gray-500 text-center py-4">Sistemde kayıtlı kat bulunmamaktadır.</p>)}
 
-      {/* Oda Listesi ve Yönetimi */}
       {selectedKatId && (
         <div className="mt-8 p-4 bg-gray-50 rounded-lg shadow">
           <div className="flex justify-between items-center mb-4">
@@ -229,7 +253,7 @@ const YatakServisYonetimiPage = () => {
             </button>
           </div>
           {isLoadingOdalar && <p className="text-gray-600 py-2">Odalar yükleniyor...</p>}
-          {odaFormError && <p className="text-red-500 bg-red-100 p-2 rounded my-2">{odaFormError}</p>}
+          {odaFormError && <p className="text-center text-red-500 bg-red-100 p-2 rounded my-2">{odaFormError}</p>}
           {!isLoadingOdalar && !odaFormError && odalar.length === 0 && (<p className="text-gray-500 text-center py-2">Bu katta kayıtlı oda bulunmamaktadır.</p>)}
           {!isLoadingOdalar && odalar.length > 0 && (
             <div className="overflow-x-auto bg-white rounded-lg shadow mt-2">
@@ -252,22 +276,16 @@ const YatakServisYonetimiPage = () => {
         </div>
       )}
 
-      {/* Yatak Listesi ve Yönetimi (Seçili Oda İçin) */}
       {selectedOda && (
         <div className="mt-8 p-4 bg-gray-50 rounded-lg shadow">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-2xl font-semibold text-gray-700">Oda {selectedOda.odaNumarasi} - Yataklar</h2>
-            <div>
-              <button onClick={openYatakEkleModal} className="mr-2 bg-teal-500 hover:bg-teal-600 text-white font-semibold py-2 px-3 rounded-lg shadow-md text-sm" disabled={isLoadingYataklar}>
-                Bu Odaya Yatak Ekle
-              </button>
-              <button disabled className="bg-blue-300 text-white font-semibold py-2 px-3 rounded-lg shadow-md text-sm cursor-not-allowed">
-                Yeni Hasta Yatışı {/* Yatış Modalı Sonra Eklenecek */}
-              </button>
-            </div>
+            <button onClick={openYatakEkleModal} className="mr-2 bg-teal-500 hover:bg-teal-600 text-white font-semibold py-2 px-3 rounded-lg shadow-md text-sm" disabled={isLoadingYataklar}>
+              Bu Odaya Yatak Ekle
+            </button>
           </div>
           {isLoadingYataklar && <p className="text-gray-600 py-2">Yataklar yükleniyor...</p>}
-          {yatakFormError && <p className="text-red-500 bg-red-100 p-2 rounded my-2">{yatakFormError}</p>}
+          {yatakFormError && <p className="text-center text-red-500 bg-red-100 p-2 rounded my-2">{yatakFormError}</p>}
           {!isLoadingYataklar && !yatakFormError && yataklar.length === 0 && (<p className="text-gray-500 text-center py-2">Bu odada yatak yok.</p>)}
           {!isLoadingYataklar && yataklar.length > 0 && (
             <div className="overflow-x-auto bg-white rounded-lg shadow mt-4">
@@ -278,13 +296,19 @@ const YatakServisYonetimiPage = () => {
                     <tr key={yatak.id} className={`hover:bg-gray-100 ${yatak.doluMu ? 'bg-red-50' : 'bg-green-50'}`}>
                       <td className="td-style">{yatak.yatakNumarasi}</td>
                       <td className="td-style text-center"><span className={`px-2 py-1 font-semibold leading-tight rounded-full text-xs ${yatak.doluMu ? 'text-red-700 bg-red-100' : 'text-green-700 bg-green-100'}`}>{yatak.doluMu ? 'Dolu' : 'Boş'}</span></td>
-                      <td className="td-style">{yatak.doluMu ? (yatak.yatanHastaAdi || 'Bilinmiyor') : '-'}</td> {/* yatanHastaAdi DTO'dan gelmeli */}
+                      <td className="td-style">{yatak.doluMu ? (yatak.yatanHastaAdiSoyadi || 'Bilinmiyor') : '-'}</td>
                       <td className="td-style space-x-1">
                         {yatak.doluMu ? (
-                          <><button className="btn-xs-blue">Yatış Detay</button><button className="btn-xs-purple">Hemşire Ata</button><button className="btn-xs-orange">Taburcu Et</button></>
-                        ) : (<button className="btn-xs-green">Yatış Yap</button>)}
-                        <button onClick={() => openYatakDuzenleModal(yatak)} className="btn-xs-gray ml-2">Yatak Düz.</button>
-                        <button onClick={() => handleYatakSil(yatak.id, yatak.yatakNumarasi)} className="btn-xs-red">Yatak Sil</button>
+                          <>
+                            <button className="btn-xs-blue" disabled>Yatış Detay</button>
+                            <button className="btn-xs-purple" disabled>Hemşire Ata</button>
+                            <button onClick={() => handleTaburcuEt(yatak)} className="btn-xs-orange" disabled={isLoadingYataklar}>Taburcu Et</button>
+                          </>
+                        ) : (
+                          <button onClick={() => openYatisYapModal(yatak)} className="btn-xs-green" disabled={isLoadingYataklar}>Yatış Yap</button>
+                        )}
+                        <button onClick={() => openYatakDuzenleModal(yatak)} className="btn-xs-gray ml-2" disabled={isLoadingYataklar || yatak.doluMu}>Yatak Düz.</button>
+                        <button onClick={() => handleYatakSil(yatak.id, yatak.yatakNumarasi)} className="btn-xs-red" disabled={isLoadingYataklar || yatak.doluMu}>Yatak Sil</button>
                       </td>
                     </tr>))}
                 </tbody>
@@ -294,24 +318,47 @@ const YatakServisYonetimiPage = () => {
         </div>
       )}
       
-      {/* Oda Ekleme/Düzenleme Modalı */}
-      {showOdaModal && ( <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center z-50"><div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md"><h2 className="text-2xl font-semibold mb-6 text-gray-800">{editOda ? 'Odayı Düzenle' : 'Yeni Oda Ekle'}</h2>{odaFormError && <p className="text-red-500 bg-red-100 p-2 rounded mb-4">{odaFormError}</p>}<form onSubmit={handleOdaFormSubmit} className="space-y-4"><div><label htmlFor="odaNumarasi" className="block text-sm font-medium text-gray-700">Oda Numarası</label><input type="text" name="odaNumarasi" id="odaNumarasi" value={odaFormData.odaNumarasi} onChange={handleOdaFormInputChange} required className="mt-1 block w-full input-style" disabled={isOdaFormLoading} /></div><div><label htmlFor="kapasite" className="block text-sm font-medium text-gray-700">Kapasite</label><input type="number" name="kapasite" id="kapasite" value={odaFormData.kapasite} onChange={handleOdaFormInputChange} required min="1" className="mt-1 block w-full input-style" disabled={isOdaFormLoading} /></div><div className="mt-6 flex justify-end space-x-3"><button type="button" onClick={() => { setShowOdaModal(false); resetOdaForm(); }} className="btn-cancel" disabled={isOdaFormLoading}>İptal</button><button type="submit" className="btn-primary" disabled={isOdaFormLoading}>{isOdaFormLoading ? 'İşleniyor...' : (editOda ? 'Güncelle' : 'Kaydet')}</button></div></form></div></div>)}
-      
-      {/* Yatak Ekleme/Düzenleme Modalı */}
+      {showOdaModal && ( <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center z-50"><div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md"><h2 className="text-2xl font-semibold mb-6 text-gray-800">{editOda ? 'Odayı Düzenle' : `Kat ${katlar.find(k => k.id.toString() === selectedKatId)?.ad || ''} - Yeni Oda Ekle`}</h2>{odaFormError && <p className="text-red-500 bg-red-100 p-2 rounded mb-4">{odaFormError}</p>}<form onSubmit={handleOdaFormSubmit} className="space-y-4"><div><label htmlFor="odaNumarasi" className="block text-sm font-medium text-gray-700">Oda Numarası</label><input type="text" name="odaNumarasi" id="odaNumarasi" value={odaFormData.odaNumarasi} onChange={handleOdaFormInputChange} required className="mt-1 block w-full input-style" disabled={isOdaFormLoading} /></div><div><label htmlFor="kapasite" className="block text-sm font-medium text-gray-700">Kapasite</label><input type="number" name="kapasite" id="kapasite" value={odaFormData.kapasite} onChange={handleOdaFormInputChange} required min="1" className="mt-1 block w-full input-style" disabled={isOdaFormLoading} /></div><div className="mt-6 flex justify-end space-x-3"><button type="button" onClick={() => { setShowOdaModal(false); resetOdaForm(); }} className="btn-cancel" disabled={isOdaFormLoading}>İptal</button><button type="submit" className="btn-primary" disabled={isOdaFormLoading}>{isOdaFormLoading ? 'İşleniyor...' : (editOda ? 'Güncelle' : 'Kaydet')}</button></div></form></div></div>)}
       {showYatakModal && ( <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center z-50"><div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md"><h2 className="text-2xl font-semibold mb-6 text-gray-800">{editYatak ? 'Yatağı Düzenle' : `Oda ${selectedOda?.odaNumarasi} - Yeni Yatak Ekle`}</h2>{yatakFormError && <p className="text-red-500 bg-red-100 p-2 rounded mb-4">{yatakFormError}</p>}<form onSubmit={handleYatakFormSubmit} className="space-y-4"><div><label htmlFor="yatakNumarasi" className="block text-sm font-medium text-gray-700">Yatak Numarası</label><input type="text" name="yatakNumarasi" id="yatakNumarasi" value={yatakFormData.yatakNumarasi} onChange={handleYatakFormInputChange} required className="mt-1 block w-full input-style" disabled={isYatakFormLoading} /></div><div className="mt-6 flex justify-end space-x-3"><button type="button" onClick={() => { setShowYatakModal(false); resetYatakForm(); }} className="btn-cancel" disabled={isYatakFormLoading}>İptal</button><button type="submit" className="btn-primary" disabled={isYatakFormLoading}>{isYatakFormLoading ? 'İşleniyor...' : (editYatak ? 'Güncelle' : 'Kaydet')}</button></div></form></div></div>)}
     
-      {/* Yeni Yatış Oluşturma Modalı ve Hemşire Atama Modalı buraya eklenecek */}
+      {showYatisModal && selectedYatakForYatis && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center z-50">
+          <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-lg">
+            <h2 className="text-2xl font-semibold mb-6 text-gray-800">Oda {selectedOda?.odaNumarasi} / Yatak {selectedYatakForYatis.yatakNumarasi} - Yeni Hasta Yatışı</h2>
+            {yatisFormError && <p className="text-red-500 bg-red-100 p-2 rounded mb-4">{yatisFormError}</p>}
+            <form onSubmit={handleYatisYapSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="hastaId" className="block text-sm font-medium text-gray-700">Hasta Seçin</label>
+                <select name="hastaId" id="hastaId" value={yatisFormData.hastaId} onChange={handleYatisFormInputChange} required className="mt-1 block w-full select-style" disabled={isYatisFormLoading || hastalarListesi.length === 0}>
+                  <option value="">-- Hasta Seçin --</option>
+                  {hastalarListesi.map(h => <option key={h.id} value={h.id}>{h.ad} {h.soyad} (TC: {h.tcKimlikNo || 'N/A'})</option>)}
+                </select>
+                {hastalarListesi.length === 0 && !isLoadingKatlar && <p className="text-xs text-red-500 mt-1">Sistemde kayıtlı hasta bulunamadı.</p>}
+              </div>
+              <div>
+                <label htmlFor="sorumluDoktorId" className="block text-sm font-medium text-gray-700">Sorumlu Doktor Seçin</label>
+                <select name="sorumluDoktorId" id="sorumluDoktorId" value={yatisFormData.sorumluDoktorId} onChange={handleYatisFormInputChange} required className="mt-1 block w-full select-style" disabled={isYatisFormLoading || doktorlarListesi.length === 0}>
+                  <option value="">-- Doktor Seçin --</option>
+                  {doktorlarListesi.map(d => <option key={d.id} value={d.id}>{d.ad} {d.soyad} ({d.doktorDetay?.brans?.ad || 'Branş Yok'})</option>)}
+                </select>
+                {doktorlarListesi.length === 0 && !isLoadingKatlar && <p className="text-xs text-red-500 mt-1">Sistemde kayıtlı doktor bulunamadı.</p>}
+              </div>
+              <div>
+                <label htmlFor="yatisNedeni" className="block text-sm font-medium text-gray-700">Yatış Nedeni</label>
+                <textarea name="yatisNedeni" id="yatisNedeni" value={yatisFormData.yatisNedeni} onChange={handleYatisFormInputChange} required rows="3" className="mt-1 block w-full input-style" disabled={isYatisFormLoading}></textarea>
+              </div>
+              <div className="mt-6 flex justify-end space-x-3">
+                <button type="button" onClick={() => { setShowYatisModal(false); resetYatisForm(); }} className="btn-cancel" disabled={isYatisFormLoading}>İptal</button>
+                <button type="submit" className="btn-primary" disabled={isYatisFormLoading || !yatisFormData.hastaId || !yatisFormData.sorumluDoktorId || !yatisFormData.yatisNedeni.trim()}>
+                  {isYatisFormLoading ? 'Yatış Yapılıyor...' : 'Hastayı Yatır'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
-
-// Stil class'larını (th-style, td-style, btn-xs-..., btn-primary, btn-cancel) 
-// index.css veya App.css dosyanıza eklemeyi unutmayın.
-// Örnek:
-// .th-style { @apply px-3 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider; }
-// .td-style { @apply px-3 py-4 border-b border-gray-200 text-sm; }
-// .btn-primary { @apply px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500; }
-// .btn-cancel { @apply px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md border border-gray-300; }
-// Diğer btn-xs-... stilleri de benzer şekilde Tailwind @apply direktifleriyle tanımlanabilir.
 
 export default YatakServisYonetimiPage;

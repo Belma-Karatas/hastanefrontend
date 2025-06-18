@@ -24,7 +24,7 @@ const PersonelYonetimiPage = () => {
     sifre: '',
     telefon: '',
     departmanId: '',
-    roller: [],
+    roller: [], // Bu bir Set veya Array olabilir, backend DTO'suna göre handle edilecek
     bransId: '',
   });
 
@@ -42,10 +42,10 @@ const PersonelYonetimiPage = () => {
         bransService.getAllBranslar(),
         rolService.getAllRoller(),
       ]);
-      setPersoneller(personelRes.data);
-      setDepartmanlar(deptRes.data);
-      setBranslar(bransRes.data);
-      setRoller(rolRes.data);
+      setPersoneller(personelRes.data || []); // response.data null ise boş array ata
+      setDepartmanlar(deptRes.data || []);
+      setBranslar(bransRes.data || []);
+      setRoller(rolRes.data || []);
     } catch (err) {
       console.error("Veriler getirilirken hata:", err);
       setError(err.response?.data?.message || err.message || 'Gerekli veriler yüklenemedi.');
@@ -63,6 +63,9 @@ const PersonelYonetimiPage = () => {
     setFormData(prev => {
       const currentRoles = prev.roller || [];
       if (checked) {
+        // Backend'e "ROLE_" ön ekiyle göndermemiz gerekiyor olabilir,
+        // ya da backend bu ön eki kendi ekliyor/kaldırıyor olabilir.
+        // Şimdilik frontend'de "ROLE_DOKTOR" gibi tam adını saklayalım.
         return { ...prev, roller: [...currentRoles, value] };
       } else {
         return { ...prev, roller: currentRoles.filter(rol => rol !== value) };
@@ -70,7 +73,13 @@ const PersonelYonetimiPage = () => {
     });
   };
   
-  const isDoktorSecili = formData.roller.includes('ROLE_DOKTOR');
+  // formData.roller bir Set veya Array olabilir. includes Set üzerinde çalışmaz.
+  const isDoktorSecili = Array.isArray(formData.roller) 
+    ? formData.roller.includes('ROLE_DOKTOR') || formData.roller.includes('DOKTOR') 
+    : formData.roller instanceof Set 
+      ? formData.roller.has('ROLE_DOKTOR') || formData.roller.has('DOKTOR')
+      : false;
+
 
   const resetForm = () => {
     setFormData({
@@ -87,18 +96,20 @@ const PersonelYonetimiPage = () => {
     setShowModal(true);
   };
 
-  const openEditModal = (personel) => { // Düzenleme için personel verilerini forma yükle
+  const openEditModal = (personelDto) => { // Parametre artık backend'den gelen DTO
     resetForm();
-    setEditPersonelId(personel.id);
+    setEditPersonelId(personelDto.id);
     setFormData({
-      ad: personel.ad || '',
-      soyad: personel.soyad || '',
-      email: personel.kullanici?.email || '',
-      sifre: '', // Şifre düzenlemede boş gösterilir, sadece istenirse değiştirilir
-      telefon: personel.telefon || '',
-      departmanId: personel.departman?.id || '',
-      roller: personel.kullanici?.roller?.map(r => r.ad) || [],
-      bransId: personel.doktorDetay?.brans?.id || '',
+      ad: personelDto.ad || '',
+      soyad: personelDto.soyad || '',
+      email: personelDto.email || '', // DTO'dan direkt email
+      sifre: '', 
+      telefon: personelDto.telefon || '',
+      departmanId: personelDto.departmanId || '', 
+      // Backend'den gelen roller (örn: ["ADMIN", "DOKTOR"])
+      // Modal'daki checkbox'lar "ROLE_ADMIN" gibi değerler bekliyorsa ona göre ayarla
+      roller: personelDto.roller ? Array.from(personelDto.roller).map(r => `ROLE_${r}`) : [], 
+      bransId: personelDto.bransId || '', 
     });
     setShowModal(true);
   };
@@ -116,10 +127,17 @@ const PersonelYonetimiPage = () => {
       return;
     }
     if (!payload.sifre && editPersonelId) {
-        delete payload.sifre; // Şifre girilmemişse payload'dan çıkar
+        delete payload.sifre;
     }
 
-    if (payload.roller.includes('ROLE_DOKTOR') && !payload.bransId) {
+    // Roller backend'e "ROLE_DOKTOR" gibi gitmeli. formData.roller şu an ["DOKTOR"] gibi olabilir.
+    // Backend PersonelDTO'sundaki Set<String> roller alanı "ROLE_" ön ekiyle mi bekliyor?
+    // Eğer PersonelController'daki convertToPersonelDTO "ROLE_" ön ekini kaldırıyorsa,
+    // burada create/update için gönderirken bu ön eki eklememiz gerekebilir.
+    // Şimdilik backend'in "ROLE_ADMIN", "ROLE_DOKTOR" gibi tam isimleri beklediğini varsayıyoruz.
+    // (handleRolChange buna göre ayarlanmıştı.)
+
+    if (payload.roller.includes('ROLE_DOKTOR') && (!payload.bransId || payload.bransId === "" || payload.bransId === 0)) {
         setError('Doktor rolü için branş seçimi zorunludur.');
         setIsLoading(false);
         return;
@@ -127,7 +145,7 @@ const PersonelYonetimiPage = () => {
     if (!payload.roller.includes('ROLE_DOKTOR')) {
         payload.bransId = null; 
     }
-    if (payload.departmanId === '') { // Departman seçilmemişse null yap
+    if (payload.departmanId === '' || payload.departmanId === 0) {
         payload.departmanId = null;
     }
 
@@ -143,7 +161,7 @@ const PersonelYonetimiPage = () => {
       fetchAllData();
     } catch (err) {
       console.error("Personel işlemi hatası:", err);
-      setError(err.response?.data?.message || err.message || 'Personel işlemi sırasında bir hata oluştu.');
+      setError(err.response?.data?.message || err.response?.data || err.message || 'Personel işlemi sırasında bir hata oluştu.');
     }
     setIsLoading(false);
   };
@@ -196,25 +214,31 @@ const PersonelYonetimiPage = () => {
               </tr>
             </thead>
             <tbody>
-              {personeller.map((p) => (
+              {personeller.map((p) => ( // p burada PersonelDTO tipinde
                 <tr key={p.id} className="hover:bg-gray-50">
                   <td className="px-5 py-4 border-b border-gray-200 text-sm">{p.id}</td>
                   <td className="px-5 py-4 border-b border-gray-200 text-sm">{p.ad} {p.soyad}</td>
-                  <td className="px-5 py-4 border-b border-gray-200 text-sm">{p.kullanici?.email}</td>
-                  <td className="px-5 py-4 border-b border-gray-200 text-sm">{p.departman?.ad || '-'}</td>
+                  <td className="px-5 py-4 border-b border-gray-200 text-sm">{p.email || '-'}</td>
+                  <td className="px-5 py-4 border-b border-gray-200 text-sm">{p.departmanAdi || '-'}</td>
                   <td className="px-5 py-4 border-b border-gray-200 text-sm">
-                    {/* GÜNCELLENMİŞ VE DAHA GÜVENLİ ROL GÖSTERİMİ */}
-                    {p.kullanici?.roller && Array.isArray(p.kullanici.roller)
-                      ? p.kullanici.roller
-                          .map(r => (r && r.ad ? r.ad.replace('ROLE_', '') : null))
-                          .filter(Boolean) // null veya boş stringleri kaldır
-                          .join(', ') || '-'
+                    {p.roller && p.roller.size > 0 // DTO'daki roller Set olduğu için .size
+                      ? Array.from(p.roller).join(', ') 
                       : '-'}
                   </td>
-                  <td className="px-5 py-4 border-b border-gray-200 text-sm">{p.doktorDetay?.brans?.ad || '-'}</td>
+                  <td className="px-5 py-4 border-b border-gray-200 text-sm">{p.bransAdi || '-'}</td>
                   <td className="px-5 py-4 border-b border-gray-200 text-sm space-x-2">
-                    <button onClick={() => openEditModal(p)} className="text-indigo-600 hover:text-indigo-900 font-semibold">Düzenle</button>
-                    <button onClick={() => handleDelete(p.id, `${p.ad} ${p.soyad}`)} className="text-red-600 hover:text-red-900 font-semibold">Sil</button>
+                    <button 
+                        onClick={() => openEditModal(p)}
+                        className="text-indigo-600 hover:text-indigo-900 font-semibold"
+                    >
+                        Düzenle
+                    </button>
+                    <button 
+                        onClick={() => handleDelete(p.id, `${p.ad} ${p.soyad}`)} 
+                        className="text-red-600 hover:text-red-900 font-semibold"
+                    >
+                        Sil
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -265,17 +289,18 @@ const PersonelYonetimiPage = () => {
               <div>
                 <span className="block text-sm font-medium text-gray-700">Roller</span>
                 <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {roller.map(rol => (
+                  {roller.map(rol => ( // rol objesi {id, ad} şeklinde geliyor
                     <label key={rol.id} className="flex items-center space-x-2">
                       <input
                         type="checkbox"
                         name="roller"
-                        value={rol.ad}
+                        value={rol.ad} // Backend'e "ROLE_ADMIN" gibi tam adını gönderiyoruz
                         checked={formData.roller.includes(rol.ad)}
                         onChange={handleRolChange}
                         className="form-checkbox h-4 w-4 text-indigo-600"
                       />
-                      <span>{rol.ad ? rol.ad.replace('ROLE_', '') : 'Bilinmeyen Rol'}</span> {/* Güvenlik kontrolü eklendi */}
+                      {/* Kullanıcıya gösterirken "ROLE_" ön ekini kaldırabiliriz */}
+                      <span>{rol.ad ? rol.ad.replace('ROLE_', '') : 'Bilinmeyen Rol'}</span>
                     </label>
                   ))}
                 </div>
@@ -284,7 +309,7 @@ const PersonelYonetimiPage = () => {
               {isDoktorSecili && (
                 <div>
                   <label htmlFor="bransId" className="block text-sm font-medium text-gray-700">Branş (Doktor için)</label>
-                  <select name="bransId" id="bransId" value={formData.bransId} onChange={handleInputChange} className="mt-1 block w-full select-style" required={isDoktorSecili}> {/* required eklendi */}
+                  <select name="bransId" id="bransId" value={formData.bransId} onChange={handleInputChange} className="mt-1 block w-full select-style" required={isDoktorSecili}>
                     <option value="">Branş Seçiniz...</option>
                     {branslar.map(b => <option key={b.id} value={b.id}>{b.ad}</option>)}
                   </select>

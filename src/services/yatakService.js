@@ -2,10 +2,10 @@
 import apiClient from './api';
 
 const getYataklarByOdaId = (odaId) => {
-  return apiClient.get('/yataklar', { params: { odaId: odaId } }); // Backend'in bu query param'ı desteklediğini varsayıyoruz
+  return apiClient.get('/yataklar', { params: { odaId: odaId } });
 };
 
-const getAllYataklar = () => { // Tüm yatakları getirmek için
+const getAllYataklar = () => {
     return apiClient.get('/yataklar');
 };
 
@@ -14,7 +14,6 @@ const getYatakById = (id) => {
 };
 
 const createYatak = (yatakData) => {
-  // yatakData = { yatakNumarasi: "A1", odaId: 1, doluMu: false }
   return apiClient.post('/yataklar', yatakData);
 };
 
@@ -22,9 +21,16 @@ const updateYatak = (id, yatakData) => {
   return apiClient.put(`/yataklar/${id}`, yatakData);
 };
 
-const updateYatakDolulukDurumu = (id, doluMuData) => {
-    // doluMuData = { doluMu: true } veya sadece boolean değer de olabilir, backend'e bağlı
-    return apiClient.put(`/yataklar/${id}/doluluk`, doluMuData ); // Backend endpoint'i bu şekildeyse
+const updateYatakDolulukDurumu = (id, doluMu) => { // Sadece boolean değer alacak şekilde güncellendi
+    // Backend'e { "doluMu": true } gibi bir JSON objesi yerine
+    // doğrudan query param olarak gönderebiliriz veya backend'in beklediği yapıya göre ayarlanmalı.
+    // Şimdilik backend'in /yataklar/{id}/doluluk?doluMu=true gibi bir yapıyı desteklediğini varsayalım
+    // veya PUT body'sinde sadece boolean bir değer (ya da {doluMu: boolean}) beklediğini.
+    // Backend controller'ınızdaki @RequestParam veya @RequestBody'ye göre ayarlayın.
+    // Eğer @RequestParam boolean doluMu ise:
+    return apiClient.put(`/yataklar/${id}/doluluk?doluMu=${doluMu}`); 
+    // Eğer @RequestBody YatakDTO veya benzeri bir obje ve içinde sadece doluMu varsa:
+    // return apiClient.put(`/yataklar/${id}/doluluk`, { doluMu: doluMu });
 };
 
 const deleteYatak = (id) => {
@@ -41,4 +47,4 @@ const yatakService = {
   deleteYatak,
 };
 
-export default yatakService; // BU SATIR ÇOK ÖNEMLİ
+export default yatakService;

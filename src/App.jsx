@@ -1,11 +1,14 @@
+// src/App.jsx
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
-// Admin sayfalarını import et
-import AdminLayout from './layouts/AdminLayout';
+// Layout
+import AppLayout from './layouts/AppLayout'; // AdminLayout -> AppLayout olarak değişti
+
+// Admin sayfaları
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import DepartmanYonetimiPage from './pages/admin/DepartmanYonetimiPage';
 import BransYonetimiPage from './pages/admin/BransYonetimiPage';
@@ -17,30 +20,27 @@ import VardiyaTanimlariPage from './pages/admin/VardiyaTanimlariPage';
 import PersonelVardiyalariPage from './pages/admin/PersonelVardiyalariPage';
 import IlacYonetimiPage from './pages/admin/IlacYonetimiPage';
 import KatYonetimiPage from './pages/admin/KatYonetimiPage';
-import YatakServisYonetimiPage from './pages/admin/YatakServisYonetimiPage'; // YENİ İMPORT
+import YatakServisYonetimiPage from './pages/admin/YatakServisYonetimiPage';
+import AcilDurumKayitlariPage from './pages/admin/AcilDurumKayitlariPage';
 
-// Korumalı bir yol bileşeni (Rol kontrolü eklendi)
+// Hasta sayfaları (YENİ)
+import HastaDashboardPage from './pages/hasta/HastaDashboardPage'; // Oluşturulacak
+import RandevuAlPage from './pages/hasta/RandevuAlPage';       // Oluşturulacak
+import RandevularimPage from './pages/hasta/RandevularimPage'; // Oluşturulacak
+
 const ProtectedRoute = ({ children, requiredRole }) => {
   const { isAuthenticated, isLoading, userRoles } = useAuth();
-
-  if (isLoading) {
-    return <div className="min-h-screen flex justify-center items-center text-xl font-semibold">Oturum bilgileri yükleniyor...</div>;
-  }
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
+  if (isLoading) return <div className="min-h-screen flex justify-center items-center text-xl font-semibold">Oturum bilgileri yükleniyor...</div>;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (requiredRole && !userRoles.includes(requiredRole)) {
     console.warn(`Yetkisiz erişim denemesi: ${requiredRole} rolü gerekli. Kullanıcının rolleri: ${userRoles.join(', ')}`);
-    return <Navigate to="/dashboard" replace />; // Veya uygun bir "Yetkisiz Erişim" sayfasına
+    const defaultPath = userRoles.includes('ROLE_ADMIN') ? "/admin/dashboard" : "/dashboard";
+    return <Navigate to={userRoles.length > 0 ? defaultPath : "/login"} replace />;
   }
-
   return children;
 };
 
-// Örnek bir Genel Dashboard sayfası (admin olmayanlar için)
-const DashboardPage = () => {
+const DashboardPage = () => { /* ... Mevcut DashboardPage kodu ... */ 
   const { logoutContext, userToken, userRoles } = useAuth();
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-8">
@@ -64,7 +64,31 @@ const DashboardPage = () => {
   );
 };
 
-// Ana Uygulama Bileşeni
+
+// MENÜ ÖĞELERİ
+const adminMenuItems = [
+  { name: 'Gösterge Paneli', to: '/admin/dashboard' },
+  { name: 'Departman Yönetimi', to: '/admin/departmanlar' },
+  { name: 'Branş Yönetimi', to: '/admin/branslar' },
+  { name: 'Personel Yönetimi', to: '/admin/personel' },
+  { name: 'Duyuru Yönetimi', to: '/admin/duyurular' },
+  { name: 'İlaç Yönetimi', to: '/admin/ilaclar' },
+  { name: 'Vardiya Tanımları', to: '/admin/vardiya-tanimlari' },
+  { name: 'Personel Vardiyaları', to: '/admin/personel-vardiyalari' },
+  { name: 'İzin Türleri', to: '/admin/izin-turleri' },
+  { name: 'İzin Talepleri', to: '/admin/izin-talepleri' },
+  { name: 'Kat Yönetimi', to: '/admin/katlar' },
+  { name: 'Yatak ve Servis Yönetimi', to: '/admin/yatak-servis-yonetimi' },
+  { name: 'Acil Durum Kayıtları', to: '/admin/acil-durum-kayitlari' },
+];
+
+const hastaMenuItems = [
+  { name: 'Gösterge Paneli', to: '/hasta/dashboard' },
+  { name: 'Randevu Al', to: '/hasta/randevu-al' },
+  { name: 'Randevularım', to: '/hasta/randevularim' },
+  // { name: 'Profilim', to: '/hasta/profil' }, // Gelecekte eklenebilir
+];
+
 function App() {
   return (
     <AuthProvider>
@@ -75,7 +99,6 @@ function App() {
   );
 }
 
-// Route'ları yöneten bileşen
 const AppRoutes = () => {
   const { isAuthenticated, isLoading, userRoles } = useAuth();
 
@@ -84,41 +107,39 @@ const AppRoutes = () => {
   }
 
   const isAdmin = userRoles.includes('ROLE_ADMIN');
-  const defaultAuthenticatedPath = isAdmin ? "/admin/dashboard" : "/dashboard";
+  const isHasta = userRoles.includes('ROLE_HASTA');
+  // Diğer roller için de benzer kontroller eklenebilir (isDoktor, isHemsire)
+
+  let defaultAuthenticatedPath = "/dashboard"; // Genel dashboard
+  if (isAdmin) {
+    defaultAuthenticatedPath = "/admin/dashboard";
+  } else if (isHasta) {
+    defaultAuthenticatedPath = "/hasta/dashboard";
+  }
+  // TODO: Diğer roller için default path'ler eklenebilir.
 
   return (
     <Routes>
-      {/* Temel Rotalar */}
-      <Route
-        path="/login"
-        element={isAuthenticated ? <Navigate to={defaultAuthenticatedPath} replace /> : <LoginPage />}
-      />
-      <Route
-        path="/register"
-        element={isAuthenticated ? <Navigate to={defaultAuthenticatedPath} replace /> : <RegisterPage />}
-      />
+      <Route path="/login" element={isAuthenticated ? <Navigate to={defaultAuthenticatedPath} replace /> : <LoginPage />} />
+      <Route path="/register" element={isAuthenticated ? <Navigate to={defaultAuthenticatedPath} replace /> : <RegisterPage />} />
+      
+      <Route path="/dashboard" element={ <ProtectedRoute><DashboardPage /></ProtectedRoute>} />
 
-      {/* Genel Kullanıcı Dashboard'u */}
+      {/* Admin Rotaları */}
       <Route
-        path="/dashboard"
+        path="/admin"
         element={
-          <ProtectedRoute> {/* Sadece giriş yapmış olması yeterli, rol belirtilmedi */}
-            <DashboardPage />
-          </ProtectedRoute>
-        }
-      />
-
-      {/* Admin Korumalı Rotalar */}
-      <Route
-        path="/admin" // Ana admin yolu
-        element={
-          <ProtectedRoute requiredRole="ROLE_ADMIN"> {/* Sadece ROLE_ADMIN erişebilir */}
-            <AdminLayout /> {/* AdminLayout tüm /admin/* alt rotalarını sarar */}
+          <ProtectedRoute requiredRole="ROLE_ADMIN">
+            <AppLayout 
+              layoutTitle="Karataş" 
+              layoutSubtitle="ADMİN PANELİ" 
+              menuItems={adminMenuItems}
+              requiredRole="ROLE_ADMIN" 
+            />
           </ProtectedRoute>
         }
       >
-        {/* AdminLayout içindeki <Outlet />'e render edilecek nested route'lar */}
-        <Route index element={<Navigate to="dashboard" replace />} /> {/* /admin için varsayılan olarak dashboard'a yönlendir */}
+        <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<AdminDashboardPage />} />
         <Route path="departmanlar" element={<DepartmanYonetimiPage />} />
         <Route path="branslar" element={<BransYonetimiPage />} />
@@ -130,37 +151,42 @@ const AppRoutes = () => {
         <Route path="personel-vardiyalari" element={<PersonelVardiyalariPage />} />
         <Route path="ilaclar" element={<IlacYonetimiPage />} />
         <Route path="katlar" element={<KatYonetimiPage />} />
-        <Route path="yatak-servis-yonetimi" element={<YatakServisYonetimiPage />} /> {/* YATAK VE SERVİS YÖNETİMİ ROTASI */}
-        {/* 
-          Oda ve Yatak yönetimi artık YatakServisYonetimiPage içinde ele alınacağı için
-          ayrı "/admin/odalar" ve "/admin/yataklar" rotalarına genellikle gerek kalmaz.
-          Eğer hala ayrı tutmak istersen, onları da buraya ekleyebilirsin.
-        */}
+        <Route path="yatak-servis-yonetimi" element={<YatakServisYonetimiPage />} />
+        <Route path="acil-durum-kayitlari" element={<AcilDurumKayitlariPage />} />
       </Route>
 
-      {/* Uygulama Ana Sayfası Yönlendirmesi */}
+      {/* Hasta Rotaları (YENİ) */}
       <Route
-        path="/"
+        path="/hasta"
         element={
-          <Navigate 
-            to={isAuthenticated ? defaultAuthenticatedPath : "/login"} 
-            replace 
-          />
+          <ProtectedRoute requiredRole="ROLE_HASTA">
+            <AppLayout 
+              layoutTitle="Karataş" 
+              layoutSubtitle="HASTA PANELİ" 
+              menuItems={hastaMenuItems} 
+              requiredRole="ROLE_HASTA"
+            />
+          </ProtectedRoute>
         }
-      />
+      >
+        <Route index element={<Navigate to="dashboard" replace />} />
+        <Route path="dashboard" element={<HastaDashboardPage />} />
+        <Route path="randevu-al" element={<RandevuAlPage />} />
+        <Route path="randevularim" element={<RandevularimPage />} />
+      </Route>
 
-      {/* Bulunamayan Sayfalar İçin 404 Rotası */}
-      <Route path="*" element={
-        <div className="min-h-screen flex flex-col justify-center items-center bg-gray-100">
-          <div className="text-center p-8 bg-white rounded-lg shadow-md">
-            <h1 className="text-6xl font-bold text-red-500">404</h1>
-            <p className="text-2xl font-semibold text-gray-700 mt-4">Sayfa Bulunamadı</p>
-            <p className="text-gray-500 mt-2">Aradığınız sayfa mevcut değil veya taşınmış olabilir.</p>
-            <Link to="/" className="mt-6 inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-lg shadow transition duration-150 ease-in-out">
-              Ana Sayfaya Dön
-            </Link>
-          </div>
-        </div>
+      <Route path="/" element={ <Navigate to={isAuthenticated ? defaultAuthenticatedPath : "/login"} replace /> } />
+      <Route path="*" element={ /* ... 404 Sayfası ... */ 
+         <div className="min-h-screen flex flex-col justify-center items-center bg-gray-100">
+         <div className="text-center p-8 bg-white rounded-lg shadow-md">
+           <h1 className="text-6xl font-bold text-red-500">404</h1>
+           <p className="text-2xl font-semibold text-gray-700 mt-4">Sayfa Bulunamadı</p>
+           <p className="text-gray-500 mt-2">Aradığınız sayfa mevcut değil veya taşınmış olabilir.</p>
+           <Link to="/" className="mt-6 inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-lg shadow transition duration-150 ease-in-out">
+             Ana Sayfaya Dön
+           </Link>
+         </div>
+       </div>
       } />
     </Routes>
   );
