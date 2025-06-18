@@ -2,9 +2,6 @@
 import apiClient from './api';
 
 const createRandevu = (randevuData) => {
-  // Backend'deki RandevuOlusturDTO'nun hastaId bekleyip beklemediğine dikkat edin.
-  // Eğer bekliyorsa, randevuData içinde hastaId olmalı.
-  // Eğer JWT'den alıyorsa, frontend'den göndermeye gerek yok.
   return apiClient.post('/randevular', randevuData);
 };
 
@@ -12,16 +9,19 @@ const getRandevuById = (randevuId) => {
   return apiClient.get(`/randevular/${randevuId}`);
 };
 
-// HASTANIN KENDİ RANDEVULARINI GETİREN YENİ FONKSİYON
+// HASTANIN KENDİ RANDEVULARINI GETİREN FONKSİYON
 const getRandevularim = () => {
   // Backend'de bu endpoint'in JWT'den hasta bilgisini alıp,
-  // o hastaya ait randevuları döndürmesi beklenir.
-  // Örnek: GET /api/randevular/hasta/mevcut
-  // Eğer backend farklı bir yapı bekliyorsa (örn: /api/randevular/hasta/{hastaId}),
-  // o zaman AuthContext'ten hasta ID'sini alıp buraya parametre olarak geçmelisiniz.
-  return apiClient.get('/randevular/hasta/mevcut'); // Bu endpoint'i backend'de oluşturmanız gerekebilir
+  // o hastaya ait randevuları döndürmesi beklenir: GET /api/randevular/hasta/mevcut
+  return apiClient.get('/randevular/hasta/mevcut');
 };
 
+// DOKTORUN TÜM RANDEVULARINI GETİREN YENİ FONKSİYON
+const getTumRandevularimDoktor = () => {
+  // Backend'de bu endpoint'in JWT'den doktor bilgisini alıp,
+  // o doktora ait tüm randevuları döndürmesi beklenir: GET /api/randevular/doktor/tum
+  return apiClient.get('/randevular/doktor/tum'); // Bu endpoint backend'de oluşturulacak/ayarlanacak
+};
 
 const getRandevularByHastaId = (hastaId) => { // Bu admin veya doktor için kullanılabilir
   return apiClient.get(`/randevular/hasta/${hastaId}`);
@@ -32,7 +32,10 @@ const getRandevularByDoktorIdAndGun = (doktorId, gun) => { // gun YYYY-MM-DD for
 };
 
 const randevuDurumGuncelle = (randevuId, yeniDurumData) => { // yeniDurumData = { yeniDurum: "..." }
-  return apiClient.put(`/randevular/${randevuId}/durum`, yeniDurumData); // Veya query param ile: `/randevular/${randevuId}/durum?yeniDurum=${yeniDurum}`
+  // Backend'deki endpoint'e göre düzenle, eğer query param bekliyorsa:
+  // return apiClient.put(`/randevular/${randevuId}/durum?yeniDurum=${yeniDurumData.yeniDurum}`);
+  // Eğer body'de bekliyorsa (genellikle PUT için daha iyi):
+  return apiClient.put(`/randevular/${randevuId}/durum`, yeniDurumData); 
 };
 
 const randevuIptalEt = (randevuId) => {
@@ -42,7 +45,8 @@ const randevuIptalEt = (randevuId) => {
 const randevuService = {
   createRandevu,
   getRandevuById,
-  getRandevularim, // YENİ EKLENDİ
+  getRandevularim,
+  getTumRandevularimDoktor, // Yeni fonksiyon eklendi
   getRandevularByHastaId,
   getRandevularByDoktorIdAndGun,
   randevuDurumGuncelle,

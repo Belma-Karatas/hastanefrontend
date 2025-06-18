@@ -1,159 +1,143 @@
-// src/pages/doktor/DoktorMuayenePage.jsx
+// src/pages/doktor/DoktorDashboardPage.jsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom'; // Link yerine navigate kullanacağız
 import randevuService from '../../services/randevuService';
-import muayeneService from '../../services/muayeneService'; // Bu servisi ve metodunu oluşturmanız gerekecek
-import ilacService from '../../services/ilacService';
-import { format, parseISO, isValid } from 'date-fns'; // isValid eklendi
+import { useAuth } from '../../contexts/AuthContext';
+import { format, parseISO } from 'date-fns'; // Tarih formatlama için
 
-const DoktorMuayenePage = () => {
-  const { randevuId } = useParams();
-  const navigate = useNavigate();
-  const { aktifPersonelId } = useAuth();
-
-  const [randevuDetay, setRandevuDetay] = useState(null);
-  const [mevcutMuayene, setMevcutMuayene] = useState(null);
-  
-  const [tani, setTani] = useState('');
-  const [tedaviNotlari, setTedaviNotlari] = useState('');
-  const [receteIlaclari, setReceteIlaclari] = useState([]); // [{ ilacId, ilacAdi, kullanimSekli, receteIlacId? }]
-
+const DoktorDashboardPage = () => {
+  const [bugunkuRandevular, setBugunkuRandevular] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  const { aktifPersonelId, userToken } = useAuth(); // aktifPersonelId'yi doktor ID'si olarak kullanacağız
+  const navigate = useNavigate();
 
-  // İlaç Ekleme Modalı State'leri
-  const [showIlacModal, setShowIlacModal] = useState(false);
-  const [ilacAramaTerimi, setIlacAramaTerimi] = useState('');
-  const [arananIlaclar, setArananIlaclar] = useState([]);
-  const [secilenIlacModal, setSecilenIlacModal] = useState(null); // Modal için seçilen ilaç
-  const [kullanimSekliModal, setKullanimSekliModal] = useState(''); // Modal için kullanım şekli
-
-  const fetchRandevuVeMuayeneDetaylari = useCallback(async () => {
-    if (!randevuId || !aktifPersonelId) return;
+  const fetchBugunkuRandevular = useCallback(async () => {
+    if (!aktifPersonelId) {
+      setError("Doktor kimlik bilgileri bulunamadı. Lütfen tekrar giriş yapın.");
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError('');
-    setSuccessMessage('');
     try {
-      console.log(`Muayene sayfası için veri çekiliyor: Randevu ID ${randevuId}`);
-      const randevuResponse = await randevuService.getRandevuById(randevuId);
-      if (!randevuResponse.data) throw new Error("Randevu detayları alınamadı.");
-      setRandevuDetay(randevuResponse.data);
-      console.log("Randevu Detayı:", randevuResponse.data);
-
-      // Doktorun bu randevuya ait muayene yapma yetkisi var mı? (Randevunun doktoru mu?)
-      if (randevuResponse.data.doktorId !== aktifPersonelId) {
-          setError("Bu randevu için muayene kaydı oluşturma/görüntüleme yetkiniz yok.");
-          setIsLoading(false);
-          // navigate("/doktor/dashboard"); // veya yetkisiz bir sayfaya
-          return;
-      }
-
-      try {
-        // Backend'de /api/muayeneler/randevu/{randevuId} endpoint'i olmalı
-        const muayeneResponse = await muayeneService.getMuayeneByRandevuId(randevuId); 
-        if (muayeneResponse.data) {
-          console.log("Mevcut Muayene Kaydı:", muayeneResponse.data);
-          setMevcutMuayene(muayeneResponse.data);
-          setTani(muayeneResponse.data.tani || '');
-          setTedaviNotlari(muayeneResponse.data.tedaviNotlari || '');
-          // Backend'den gelen muayene DTO'su reçete ve ilaçları içeriyorsa:
-          // Örnek: muayeneResponse.data.recete.ilaclar (DTO yapınıza göre güncelleyin)
-          // const recete = muayeneResponse.data.recete;
-          // if (recete && recete.ilaclar) {
-          //   setReceteIlaclari(recete.ilaclar.map(ri => ({
-          //     ilacId: ri.ilacId,
-          //     ilacAdi: ri.ilacAdi,
-          //     kullanimSekli: ri.kullanimSekli,
-          //     receteIlacId: ri.receteIlacId // Silme/güncelleme için önemli
-          //   })));
-          // }
-        } else {
-          console.log("Bu randevu için önceden kaydedilmiş muayene bulunmuyor.");
-          setMevcutMuayene(null); // Mevcut muayene yoksa null yap
-          setTani(''); // Formu temizle
-          setTedaviNotlari('');
-          setReceteIlaclari([]);
-        }
-      } catch (muayeneErr) {
-        if (muayeneErr.response && muayeneErr.response.status === 404) {
-          console.log("Bu randevu için mevcut muayene kaydı bulunamadı (404).");
-          setMevcutMuayene(null);
-          setTani(''); 
-          setTedaviNotlari('');
-          setReceteIlaclari([]);
-        } else {
-          console.error("Mevcut muayene bilgileri çekilirken hata:", muayeneErr);
-          // Hata mesajını direkt göstermek yerine daha kullanıcı dostu bir mesaj verilebilir.
-          // setError("Mevcut muayene bilgileri yüklenirken bir sorun oluştu.");
-        }
+      const bugunTarihiStr = format(new Date(), 'yyyy-MM-dd');
+      // Backend'e doktor ID'si (aktifPersonelId) ve günün tarihi gönderilecek.
+      const response = await randevuService.getRandevularByDoktorIdAndGun(aktifPersonelId, bugunTarihiStr);
+      
+      if (response.data && Array.isArray(response.data)) {
+        // Randevuları saate göre sırala
+        const siraliRandevular = response.data.sort((a, b) => 
+          new Date(a.randevuTarihiSaati) - new Date(b.randevuTarihiSaati)
+        );
+        setBugunkuRandevular(siraliRandevular);
+      } else {
+        console.warn("API'dan beklenen randevu listesi formatı gelmedi:", response.data);
+        setBugunkuRandevular([]);
       }
     } catch (err) {
-      console.error("Randevu detayları getirilirken hata:", err);
-      setError(err.response?.data?.message || err.message || "Randevu bilgileri yüklenemedi.");
-      // navigate('/doktor/dashboard'); // Opsiyonel: Hata durumunda dashboard'a dön
+      console.error("Bugünkü randevular getirilirken hata:", err);
+      setError(err.response?.data?.message || err.message || 'Bugünkü randevular yüklenemedi.');
+      setBugunkuRandevular([]);
     }
     setIsLoading(false);
-  }, [randevuId, aktifPersonelId, navigate]);
+  }, [aktifPersonelId]);
 
   useEffect(() => {
-    fetchRandevuVeMuayeneDetaylari();
-  }, [fetchRandevuVeMuayeneDetaylari]);
-  
-  // ... (handleMuayeneKaydet, ilaç arama/ekleme/kaldırma fonksiyonları ve JSX kısmı sonraki adımlarda eklenecek) ...
+    // Sadece userToken ve aktifPersonelId varsa veri çek
+    if (userToken && aktifPersonelId) {
+      fetchBugunkuRandevular();
+    } else if (!userToken) {
+      setIsLoading(false);
+      setError("Randevuları görmek için lütfen giriş yapın.");
+    } else if (!aktifPersonelId && userToken) {
+      setIsLoading(false);
+      setError("Doktor profili bulunamadı. Lütfen yönetici ile iletişime geçin.");
+    }
+  }, [userToken, aktifPersonelId, fetchBugunkuRandevular]);
+
+  const handleMuayeneGit = (randevuId) => {
+    navigate(`/doktor/muayene/${randevuId}`);
+  };
 
   if (isLoading) {
-    return <div className="container mx-auto p-8 text-center text-xl font-semibold">Muayene Bilgileri Yükleniyor...</div>;
-  }
-
-  if (error && !randevuDetay) { // Eğer randevu detayı hiç yüklenemediyse ve hata varsa
     return (
-        <div className="container mx-auto p-8 text-center">
-            <p className="text-red-600 bg-red-100 p-4 rounded-md">{error}</p>
-            <button onClick={() => navigate(-1)} className="mt-4 btn-primary">Geri Dön</button>
+        <div className="container mx-auto px-4 py-8 bg-white bg-opacity-90 rounded-lg shadow-xl text-center">
+            <p className="text-xl font-semibold text-gray-700">Bugünkü randevular yükleniyor...</p>
         </div>
     );
   }
-  
-  if (!randevuDetay) { // Randevu detayı hala yüklenmemişse (hata yokken bu olmamalı ama bir fallback)
-      return <div className="container mx-auto p-8 text-center">Randevu bilgisi bulunamadı.</div>;
-  }
 
-
-  // JSX (Form ve diğer elementler buraya gelecek)
   return (
     <div className="container mx-auto px-4 py-8">
-      <button 
-        onClick={() => navigate(-1)} 
-        className="mb-4 inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-      >
-        ← Geri
-      </button>
-      <h1 className="text-3xl font-bold text-gray-800 mb-2">Muayene Ekranı</h1>
-      <div className="bg-gray-100 p-4 rounded-lg shadow mb-6">
-        <p className="text-lg">Hasta: <span className="font-semibold">{randevuDetay.hastaAdiSoyadi}</span></p>
-        <p className="text-md">
-          Randevu: <span className="font-semibold">
-            {randevuDetay.randevuTarihiSaati && isValid(parseISO(randevuDetay.randevuTarihiSaati)) 
-              ? format(parseISO(randevuDetay.randevuTarihiSaati), 'dd.MM.yyyy HH:mm') 
-              : 'Geçersiz Tarih'}
-          </span>
-        </p>
-        <p className="text-sm">Doktor: <span className="font-semibold">{randevuDetay.doktorAdiSoyadi} ({randevuDetay.doktorBransAdi})</span></p>
-      </div>
-
-      {/* Hata ve başarı mesajları için genel bir alan */}
-      {error && <div className="mb-4 p-3 bg-red-100 text-red-700 border border-red-300 rounded-md">{error}</div>}
-      {successMessage && <div className="mb-4 p-3 bg-green-100 text-green-700 border border-green-300 rounded-md">{successMessage}</div>}
+      <h1 className="text-3xl font-bold text-gray-800 mb-6">Doktor Gösterge Paneli</h1>
       
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+          <strong className="font-bold">Hata: </strong>
+          <span className="block sm:inline">{error}</span>
+        </div>
+      )}
+
       <div className="bg-white p-6 rounded-lg shadow-xl">
-        <p className="text-gray-600">Muayene formu ve reçete bölümü buraya eklenecek.</p>
-        {/* Form Alanları, İlaç Ekleme Modalı, Kaydet Butonu vs. */}
+        <h2 className="text-2xl font-semibold text-gray-700 mb-4">
+          Bugünkü Randevularınız ({format(new Date(), 'dd.MM.yyyy')})
+        </h2>
+        {bugunkuRandevular.length === 0 && !error ? (
+          <p className="text-gray-500">Bugün için planlanmış randevunuz bulunmamaktadır.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full leading-normal">
+              <thead>
+                <tr>
+                  <th className="th-style">Saat</th>
+                  <th className="th-style">Hasta</th>
+                  <th className="th-style">Durum</th>
+                  <th className="th-style">İşlem</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bugunkuRandevular.map((randevu) => (
+                  <tr key={randevu.id} className="hover:bg-gray-50">
+                    <td className="td-style">{format(parseISO(randevu.randevuTarihiSaati), 'HH:mm')}</td>
+                    <td className="td-style">{randevu.hastaAdiSoyadi}</td>
+                    <td className="td-style">
+                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full 
+                        ${randevu.durum === 'PLANLANDI' ? 'bg-blue-100 text-blue-800' : 
+                          randevu.durum === 'TAMAMLANDI' ? 'bg-green-100 text-green-800' :
+                          randevu.durum === 'IPTAL EDILDI' ? 'bg-red-100 text-red-800' : 
+                          'bg-gray-100 text-gray-800'}`}>
+                        {randevu.durum}
+                      </span>
+                    </td>
+                    <td className="td-style">
+                      {randevu.durum === 'PLANLANDI' && (
+                        <button
+                          onClick={() => handleMuayeneGit(randevu.id)}
+                          className="btn-xs-green"
+                        >
+                          Muayeneyi Başlat
+                        </button>
+                      )}
+                      {randevu.durum === 'TAMAMLANDI' && (
+                         <button
+                            onClick={() => handleMuayeneGit(randevu.id)}
+                            className="btn-xs-blue"
+                        >
+                            Muayeneyi Görüntüle
+                        </button>
+                      )}
+                       {/* İptal edilmiş randevular için bir işlem butonu göstermeyebiliriz veya farklı bir aksiyon olabilir */}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-export default DoktorMuayenePage;
+export default DoktorDashboardPage;
