@@ -6,7 +6,7 @@ import RegisterPage from './pages/RegisterPage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 // Layout
-import AppLayout from './layouts/AppLayout'; // AdminLayout -> AppLayout olarak değişti
+import AppLayout from './layouts/AppLayout';
 
 // Admin sayfaları
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
@@ -23,24 +23,39 @@ import KatYonetimiPage from './pages/admin/KatYonetimiPage';
 import YatakServisYonetimiPage from './pages/admin/YatakServisYonetimiPage';
 import AcilDurumKayitlariPage from './pages/admin/AcilDurumKayitlariPage';
 
-// Hasta sayfaları (YENİ)
-import HastaDashboardPage from './pages/hasta/HastaDashboardPage'; // Oluşturulacak
-import RandevuAlPage from './pages/hasta/RandevuAlPage';       // Oluşturulacak
-import RandevularimPage from './pages/hasta/RandevularimPage'; // Oluşturulacak
+// Hasta sayfaları
+import HastaDashboardPage from './pages/hasta/HastaDashboardPage';
+import RandevuAlPage from './pages/hasta/RandevuAlPage';
+import RandevularimPage from './pages/hasta/RandevularimPage';
+
+// DOKTOR SAYFALARI
+import DoktorDashboardPage from './pages/doktor/DoktorDashboardPage';
+import DoktorRandevularimPage from './pages/doktor/DoktorRandevularimPage';
+import DoktorMuayenePage from './pages/doktor/DoktorMuayenePage'; // <<-- YENİ IMPORT
+
+// Zamanla eklenecek diğer doktor sayfaları:
+// import DoktorIzinTalepPage from './pages/doktor/DoktorIzinTalepPage';
+// import DoktorVardiyalarimPage from './pages/doktor/DoktorVardiyalarimPage';
 
 const ProtectedRoute = ({ children, requiredRole }) => {
   const { isAuthenticated, isLoading, userRoles } = useAuth();
   if (isLoading) return <div className="min-h-screen flex justify-center items-center text-xl font-semibold">Oturum bilgileri yükleniyor...</div>;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  
   if (requiredRole && !userRoles.includes(requiredRole)) {
-    console.warn(`Yetkisiz erişim denemesi: ${requiredRole} rolü gerekli. Kullanıcının rolleri: ${userRoles.join(', ')}`);
-    const defaultPath = userRoles.includes('ROLE_ADMIN') ? "/admin/dashboard" : "/dashboard";
-    return <Navigate to={userRoles.length > 0 ? defaultPath : "/login"} replace />;
+    console.warn(`ProtectedRoute: Yetkisiz erişim denemesi. ${requiredRole} rolü gerekli. Kullanıcının rolleri: ${userRoles.join(', ')}`);
+    
+    let fallbackPath = "/dashboard";
+    if (userRoles.includes('ROLE_ADMIN')) fallbackPath = "/admin/dashboard";
+    else if (userRoles.includes('ROLE_HASTA')) fallbackPath = "/hasta/dashboard";
+    else if (userRoles.includes('ROLE_DOKTOR')) fallbackPath = "/doktor/dashboard";
+    
+    return <Navigate to={userRoles.length > 0 ? fallbackPath : "/login"} replace />;
   }
   return children;
 };
 
-const DashboardPage = () => { /* ... Mevcut DashboardPage kodu ... */ 
+const DashboardPage = () => {
   const { logoutContext, userToken, userRoles } = useAuth();
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-8">
@@ -64,7 +79,6 @@ const DashboardPage = () => { /* ... Mevcut DashboardPage kodu ... */
   );
 };
 
-
 // MENÜ ÖĞELERİ
 const adminMenuItems = [
   { name: 'Gösterge Paneli', to: '/admin/dashboard' },
@@ -86,7 +100,14 @@ const hastaMenuItems = [
   { name: 'Gösterge Paneli', to: '/hasta/dashboard' },
   { name: 'Randevu Al', to: '/hasta/randevu-al' },
   { name: 'Randevularım', to: '/hasta/randevularim' },
-  // { name: 'Profilim', to: '/hasta/profil' }, // Gelecekte eklenebilir
+];
+
+const doktorMenuItems = [
+  { name: 'Gösterge Paneli', to: '/doktor/dashboard' },
+  { name: 'Randevularım', to: '/doktor/randevularim' },
+  // Muayene sayfası direkt menüde olmayacak, randevudan geçilecek.
+  // { name: 'İzin Taleplerim', to: '/doktor/izin-taleplerim' },
+  // { name: 'Vardiyalarım', to: '/doktor/vardiyalarim' },
 ];
 
 function App() {
@@ -108,15 +129,16 @@ const AppRoutes = () => {
 
   const isAdmin = userRoles.includes('ROLE_ADMIN');
   const isHasta = userRoles.includes('ROLE_HASTA');
-  // Diğer roller için de benzer kontroller eklenebilir (isDoktor, isHemsire)
+  const isDoktor = userRoles.includes('ROLE_DOKTOR');
 
-  let defaultAuthenticatedPath = "/dashboard"; // Genel dashboard
+  let defaultAuthenticatedPath = "/dashboard";
   if (isAdmin) {
     defaultAuthenticatedPath = "/admin/dashboard";
   } else if (isHasta) {
     defaultAuthenticatedPath = "/hasta/dashboard";
+  } else if (isDoktor) {
+    defaultAuthenticatedPath = "/doktor/dashboard";
   }
-  // TODO: Diğer roller için default path'ler eklenebilir.
 
   return (
     <Routes>
@@ -155,7 +177,7 @@ const AppRoutes = () => {
         <Route path="acil-durum-kayitlari" element={<AcilDurumKayitlariPage />} />
       </Route>
 
-      {/* Hasta Rotaları (YENİ) */}
+      {/* Hasta Rotaları */}
       <Route
         path="/hasta"
         element={
@@ -175,8 +197,32 @@ const AppRoutes = () => {
         <Route path="randevularim" element={<RandevularimPage />} />
       </Route>
 
+      {/* DOKTOR ROTALARI */}
+      <Route
+        path="/doktor"
+        element={
+          <ProtectedRoute requiredRole="ROLE_DOKTOR">
+            <AppLayout 
+              layoutTitle="Karataş" 
+              layoutSubtitle="DOKTOR PANELİ" 
+              menuItems={doktorMenuItems} 
+              requiredRole="ROLE_DOKTOR"
+            />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<Navigate to="dashboard" replace />} />
+        <Route path="dashboard" element={<DoktorDashboardPage />} />
+        <Route path="randevularim" element={<DoktorRandevularimPage />} />
+        <Route path="muayene/:randevuId" element={<DoktorMuayenePage />} /> {/* <<-- YENİ EKLENEN ROTA */}
+        {/* 
+        <Route path="izin-taleplerim" element={<DoktorIzinTalepPage />} />
+        <Route path="vardiyalarim" element={<DoktorVardiyalarimPage />} />
+        */}
+      </Route>
+
       <Route path="/" element={ <Navigate to={isAuthenticated ? defaultAuthenticatedPath : "/login"} replace /> } />
-      <Route path="*" element={ /* ... 404 Sayfası ... */ 
+      <Route path="*" element={
          <div className="min-h-screen flex flex-col justify-center items-center bg-gray-100">
          <div className="text-center p-8 bg-white rounded-lg shadow-md">
            <h1 className="text-6xl font-bold text-red-500">404</h1>

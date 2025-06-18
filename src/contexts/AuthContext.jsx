@@ -5,72 +5,122 @@ import authService from '../services/authService';
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [userToken, setUserToken] = useState(null);
-  const [userRoles, setUserRoles] = useState([]);
-  const [aktifHastaId, setAktifHastaId] = useState(null); // YENİ STATE
+  const [userToken, setUserToken] = useState(localStorage.getItem('userToken'));
+  const [userRoles, setUserRoles] = useState(() => {
+    const storedRoles = localStorage.getItem('userRoles');
+    try {
+      return storedRoles ? JSON.parse(storedRoles) : [];
+    } catch (e) {
+      console.error("Roller localStorage'dan parse edilirken hata:", e);
+      localStorage.removeItem('userRoles');
+      return [];
+    }
+  });
+  const [userEmail, setUserEmail] = useState(localStorage.getItem('userEmail'));
+  const [aktifKullaniciId, setAktifKullaniciId] = useState(() => {
+    const storedId = localStorage.getItem('aktifKullaniciId');
+    return storedId ? parseInt(storedId, 10) : null;
+  });
+  const [aktifPersonelId, setAktifPersonelId] = useState(() => {
+    const storedId = localStorage.getItem('aktifPersonelId');
+    return storedId ? parseInt(storedId, 10) : null;
+  });
+  const [aktifHastaId, setAktifHastaId] = useState(() => {
+    const storedId = localStorage.getItem('aktifHastaId');
+    return storedId ? parseInt(storedId, 10) : null;
+  });
+  
   const [isLoading, setIsLoading] = useState(true); 
 
   useEffect(() => {
-    const token = authService.getCurrentToken();
-    const storedRoles = localStorage.getItem('userRoles'); 
-    const storedHastaId = localStorage.getItem('aktifHastaId'); // YENİ
-
-    if (token) {
-      setUserToken(token);
-      if (storedRoles) {
-        try { setUserRoles(JSON.parse(storedRoles)); } 
-        catch (e) { localStorage.removeItem('userRoles'); }
-      }
-      if (storedHastaId) { // YENİ
-        setAktifHastaId(parseInt(storedHastaId, 10));
-      }
-    }
+    // Sadece isLoading'i yönetmek için. State'ler zaten useState içinde localStorage'dan okunuyor.
     setIsLoading(false); 
   }, []);
 
-  const loginContext = (token, roles = [], hastaId = null) => { // hastaId parametresi eklendi
-    setUserToken(token);
-    setUserRoles(roles); 
+  // loginContext parametre sırası backend LoginResponseDTO'daki alan sırasına göre düzenlendi
+  const loginContext = (token, roles = [], email = null, kullaniciId = null, personelId = null, hastaId = null) => {
+    console.log("AuthContext - loginContext ÇAĞRILDI. Gelen Değerler:");
+    console.log("  token:", token ? 'VAR' : 'YOK');
+    console.log("  roles:", roles);
+    console.log("  email:", email);
+    console.log("  kullaniciId:", kullaniciId);
+    console.log("  personelId:", personelId); 
+    console.log("  hastaId:", hastaId);
+
     localStorage.setItem('userToken', token);
-    localStorage.setItem('userRoles', JSON.stringify(roles)); 
-    if (hastaId) { // YENİ
-      setAktifHastaId(hastaId);
-      localStorage.setItem('aktifHastaId', hastaId.toString());
+    localStorage.setItem('userRoles', JSON.stringify(roles));
+    
+    setUserToken(token);
+    setUserRoles(roles);
+
+    if (email) {
+      localStorage.setItem('userEmail', email);
+      setUserEmail(email);
     } else {
-      setAktifHastaId(null);
+      localStorage.removeItem('userEmail');
+      setUserEmail(null);
+    }
+
+    if (kullaniciId) {
+      localStorage.setItem('aktifKullaniciId', kullaniciId.toString());
+      setAktifKullaniciId(kullaniciId);
+    } else {
+      localStorage.removeItem('aktifKullaniciId');
+      setAktifKullaniciId(null);
+    }
+    
+    if (personelId) {
+      localStorage.setItem('aktifPersonelId', personelId.toString());
+      setAktifPersonelId(personelId);
+      console.log("AuthContext - aktifPersonelId state'i set edildi:", personelId);
+    } else {
+      localStorage.removeItem('aktifPersonelId');
+      setAktifPersonelId(null);
+    }
+
+    if (hastaId) {
+      localStorage.setItem('aktifHastaId', hastaId.toString());
+      setAktifHastaId(hastaId);
+    } else {
       localStorage.removeItem('aktifHastaId');
+      setAktifHastaId(null);
     }
   };
 
   const logoutContext = () => {
     authService.logout(); 
     localStorage.removeItem('userRoles'); 
-    localStorage.removeItem('aktifHastaId'); // YENİ
+    localStorage.removeItem('aktifHastaId');
+    localStorage.removeItem('aktifPersonelId');
+    localStorage.removeItem('aktifKullaniciId');
+    localStorage.removeItem('userEmail');
+    
     setUserToken(null);
     setUserRoles([]); 
-    setAktifHastaId(null); // YENİ
+    setAktifHastaId(null);
+    setAktifPersonelId(null);
+    setAktifKullaniciId(null);
+    setUserEmail(null);
   };
 
   const value = {
     userToken,
     userRoles, 
-    aktifHastaId, // YENİ
+    userEmail,
+    aktifKullaniciId,
+    aktifPersonelId,
+    aktifHastaId,
     isAuthenticated: !!userToken,
     isLoading,
     loginContext,
     logoutContext,
-    // JWT'den kullanıcı ID'sini (Kullanici entity ID) almak için bir helper eklenebilir.
-    // Bu, "talepEdenKullaniciId" olarak backend'e gönderilebilir, ancak hasta randevusu için
-    // özellikle HASTA_ID'si gerekiyorsa, loginContext'te ayrıca alınmalı.
-    kullaniciIdFromToken: () => {
+    getEmailFromToken: () => {
         if (userToken) {
             try {
                 const payload = JSON.parse(atob(userToken.split('.')[1]));
-                // Backend JWT 'sub' alanında email gönderiyordu, eğer ID gönderiyorsa direkt onu alın.
-                // Şimdilik ID'yi JWT'den almıyoruz, bu sadece örnek.
-                // return payload.userId; // JWT'de userId varsa
-                return null; // Veya backend'den gelen email'i döndürün: payload.sub
+                return payload.sub;
             } catch (e) {
+                console.error("Token parse edilirken hata:", e);
                 return null;
             }
         }

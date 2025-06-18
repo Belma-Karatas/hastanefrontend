@@ -1,5 +1,6 @@
+// src/pages/LoginPage.jsx
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom'; // useNavigate gerekirse kullanılabilir
 import authService from '../services/authService';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -9,8 +10,7 @@ const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const navigate = useNavigate();
-  const { loginContext } = useAuth(); // AuthContext'ten loginContext fonksiyonunu alıyoruz
+  const { loginContext } = useAuth(); 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -19,38 +19,43 @@ const LoginPage = () => {
 
     try {
       const data = await authService.login({ email: email, sifre: password });
-      // data objesinin backend'deki LoginResponseDTO ile aynı yapıda olması beklenir:
-      // { accessToken, tokenType, roller, hastaId?, email?, kullaniciId? }
-
+      
       if (data && data.accessToken) {
         let roles = [];
-        // Backend'den gelen rollerin formatını kontrol et (List<String> olmalı)
         if (data.roller && Array.isArray(data.roller)) {
             roles = data.roller;
-        } else if (data.authorities && Array.isArray(data.authorities)) { // Spring Security varsayılanı
+        } else if (data.authorities && Array.isArray(data.authorities)) { 
             roles = data.authorities.map(auth => 
                 typeof auth === 'string' ? auth : (auth && auth.authority ? auth.authority : null)
             ).filter(Boolean);
         }
         
-        const hastaId = data.hastaId || null;
-        const kullaniciEmail = data.email || email; // Email'i yanıttan al veya formdan kullan
-        const kullaniciId = data.kullaniciId || null;
+        // Backend'den gelen tüm beklenen alanları alalım
+        const responseEmail = data.email || email; 
+        const responseKullaniciId = data.kullaniciId || null;
+        const responsePersonelId = data.personelId || null; 
+        const responseHastaId = data.hastaId || null;
 
-        console.log("LoginPage - Gelen Data:", data);
-        console.log("LoginPage - Alınan Roller:", roles);
-        console.log("LoginPage - Alınan Hasta ID:", hastaId);
-        console.log("LoginPage - Alınan Email:", kullaniciEmail);
-        console.log("LoginPage - Alınan Kullanıcı ID:", kullaniciId);
+        console.log("LoginPage - Backend'den Gelen Yanıt (data):", data);
+        console.log("LoginPage - AuthContext'e Gönderilecek Değerler:");
+        console.log("  Token:", data.accessToken ? 'VAR' : 'YOK');
+        console.log("  Roller:", roles);
+        console.log("  Email:", responseEmail);
+        console.log("  Kullanici ID:", responseKullaniciId);
+        console.log("  Personel ID:", responsePersonelId); 
+        console.log("  Hasta ID:", responseHastaId);
         
-        // AuthContext'teki loginContext fonksiyonunu çağırarak kullanıcı bilgilerini set et
-        loginContext(data.accessToken, roles, hastaId, kullaniciEmail, kullaniciId);
-
-        // Yönlendirme App.jsx içindeki AppRoutes tarafından yapılacak.
-        // useNavigate() ile bir sonraki render döngüsünde yönlendirme gerçekleşir.
-        // Eğer hemen yönlendirme isteniyorsa navigate() çağrısı burada kalabilir.
-        // navigate('/dashboard'); // Bu satır yerine AppRoutes'un yönlendirmesine güvenmek daha iyi olabilir
-                                // Çünkü AppRoutes zaten isAuthenticated durumuna göre doğru yere yönlendirir.
+        // AuthContext'teki loginContext fonksiyonunu doğru parametre sırasıyla çağır
+        loginContext(
+            data.accessToken,    // token
+            roles,               // roles
+            responseEmail,       // email (AuthContext'teki 3. parametre)
+            responseKullaniciId, // kullaniciId (AuthContext'teki 4. parametre)
+            responsePersonelId,  // personelId (AuthContext'teki 5. parametre)
+            responseHastaId      // hastaId (AuthContext'teki 6. parametre)
+        );
+        
+        // Yönlendirme App.jsx'teki AppRoutes tarafından yapılacak.
       } else {
         setError(data?.message || 'Giriş başarısız oldu veya beklenmedik bir yanıt alındı.');
       }
