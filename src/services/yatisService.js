@@ -36,6 +36,18 @@ const hemsireAtamasiniKaldir = (yatisId, yatisHemsireAtamaId) => {
     return apiClient.delete(`/yatislar/${yatisId}/hemsireler/${yatisHemsireAtamaId}`);
 };
 
+// --- YENİ EKLENEN FONKSİYON ---
+/**
+ * Giriş yapmış hemşireye atanmış ve hastası hala yatan (aktif)
+ * yatış kayıtlarını getirir.
+ */
+const getHemsireninAtanmisAktifHastalari = () => {
+  // Backend'deki GET /api/yatislar/hemsire/atanan-hastalarim endpoint'ini çağırır.
+  // Bu endpoint JWT'den hemşirenin kimliğini almalıdır.
+  return apiClient.get('/yatislar/hemsire/atanan-hastalarim');
+};
+// --- YENİ EKLENEN FONKSİYON SONU ---
+
 
 const yatisService = {
   hastaYatisiYap,
@@ -46,6 +58,7 @@ const yatisService = {
   getTumAktifYatislar,
   hemsireAta,
   hemsireAtamasiniKaldir,
+  getHemsireninAtanmisAktifHastalari, // YENİ FONKSİYON EXPORT'A EKLENDİ
 };
 
-export default yatisService; // BU SATIR ÇOK ÖNEMLİ
+export default yatisService;

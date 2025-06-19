@@ -2,28 +2,26 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import randevuService from '../../services/randevuService';
-import acilDurumKaydiService from '../../services/acilDurumKaydiService'; // <<<--- YENİ IMPORT
+import acilDurumKaydiService from '../../services/acilDurumKaydiService';
 import { useAuth } from '../../contexts/AuthContext';
-import { format, parseISO, isValid } from 'date-fns'; // isValid eklendi
-import tr from 'date-fns/locale/tr'; // Türkçe gün isimleri için
+import { format, parseISO, isValid } from 'date-fns';
+import tr from 'date-fns/locale/tr';
 
 const DoktorDashboardPage = () => {
   const [bugunkuRandevular, setBugunkuRandevular] = useState([]);
-  const [acilDurumlar, setAcilDurumlar] = useState([]); // <<<--- YENİ STATE
+  const [acilDurumlar, setAcilDurumlar] = useState([]);
   const [isLoadingRandevular, setIsLoadingRandevular] = useState(true);
-  const [isLoadingAcilDurumlar, setIsLoadingAcilDurumlar] = useState(true); // <<<--- YENİ STATE
+  const [isLoadingAcilDurumlar, setIsLoadingAcilDurumlar] = useState(true);
   const [error, setError] = useState('');
   const { aktifPersonelId, userToken } = useAuth();
   const navigate = useNavigate();
 
   const fetchBugunkuRandevular = useCallback(async () => {
     if (!aktifPersonelId) {
-      // setError("Doktor kimlik bilgileri bulunamadı. Lütfen tekrar giriş yapın."); // Bu genel error'u etkilemesin
       setIsLoadingRandevular(false);
       return;
     }
     setIsLoadingRandevular(true);
-    // setError(''); // Genel error'u burada temizlemeyelim, acil durumlar için de kullanılabilir
     try {
       const bugunTarihiStr = format(new Date(), 'yyyy-MM-dd');
       const response = await randevuService.getRandevularByDoktorIdAndGun(aktifPersonelId, bugunTarihiStr);
@@ -38,35 +36,53 @@ const DoktorDashboardPage = () => {
       }
     } catch (err) {
       console.error("Bugünkü randevular getirilirken hata:", err);
-      setError(prev => prev + (prev ? "\n" : "") + (err.response?.data?.message || err.message || 'Bugünkü randevular yüklenemedi.'));
+      setError(prev => (prev ? prev + "\n" : "") + (err.response?.data?.message || err.message || 'Bugünkü randevular yüklenemedi.'));
       setBugunkuRandevular([]);
     }
     setIsLoadingRandevular(false);
   }, [aktifPersonelId]);
 
-  const fetchAcilDurumlar = useCallback(async () => {
+  const fetchAcilDurumlar = useCallback(async (showLoadingIndicator = true) => { // showLoadingIndicator parametresi eklendi
     if (!userToken || !aktifPersonelId) {
-      setIsLoadingAcilDurumlar(false);
+      if (showLoadingIndicator) setIsLoadingAcilDurumlar(false);
       return;
     }
-    setIsLoadingAcilDurumlar(true);
-    // setError(''); // Genel error'u burada temizlemeyelim
+    if (showLoadingIndicator) setIsLoadingAcilDurumlar(true);
+    // Periyodik çağrılarda genel error'u temizlemeyelim, sadece yeni bir hata varsa üzerine yazsın.
+    // setError(''); 
     try {
       const response = await acilDurumKaydiService.getAktifVeMudahaleEdilenAcilDurumlarDoktor();
       setAcilDurumlar(response.data || []);
     } catch (err) {
       console.error("Aktif acil durumlar getirilirken hata:", err);
-      setError(prev => prev + (prev ? "\n" : "") + (err.response?.data?.message || err.message || 'Aktif acil durumlar yüklenemedi.'));
+      // Sadece eğer genel bir hata yoksa veya bu spesifik hata mesajı farklıysa error state'ini güncelle.
+      // Bu, randevu yükleme hatasının üzerine yazılmasını engeller.
+      const acilDurumError = err.response?.data?.message || err.message || 'Aktif acil durumlar yüklenemedi.';
+      setError(prev => {
+        if (prev && !prev.includes(acilDurumError)) { // Eğer zaten bir hata varsa ve bu yeni bir hataysa ekle
+          return prev + "\n" + acilDurumError;
+        }
+        return acilDurumError; // Yoksa veya aynı hataysa üzerine yaz
+      });
       setAcilDurumlar([]);
     }
-    setIsLoadingAcilDurumlar(false);
+    if (showLoadingIndicator) setIsLoadingAcilDurumlar(false);
   }, [userToken, aktifPersonelId]);
 
   useEffect(() => {
-    setError(''); // Her yüklemede genel hatayı temizle
+    setError(''); 
     if (userToken && aktifPersonelId) {
       fetchBugunkuRandevular();
-      fetchAcilDurumlar();
+      fetchAcilDurumlar(true); // İlk yüklemede loading göster
+
+      // Periyodik olarak acil durumları çek
+      const intervalId = setInterval(() => {
+        console.log("Acil durumlar periyodik olarak çekiliyor...");
+        fetchAcilDurumlar(false); // Arka planda güncellerken loading gösterme
+      }, 30000); // 30 saniyede bir
+
+      // Component unmount olduğunda interval'ı temizle
+      return () => clearInterval(intervalId);
     } else {
       setIsLoadingRandevular(false);
       setIsLoadingAcilDurumlar(false);
@@ -82,7 +98,7 @@ const DoktorDashboardPage = () => {
   const durumRenkleriAcil = {
     AKTIF: 'bg-red-100 text-red-800 border-red-400',
     'MÜDAHALE EDİLİYOR': 'bg-yellow-100 text-yellow-800 border-yellow-400',
-    SONLANDIRILDI: 'bg-green-100 text-green-800 border-green-400', // Bu durum normalde burada listelenmeyecek
+    SONLANDIRILDI: 'bg-green-100 text-green-800 border-green-400',
   };
 
   return (
@@ -103,11 +119,11 @@ const DoktorDashboardPage = () => {
             Bugünkü Randevularınız ({format(new Date(), 'dd.MM.yyyy')})
           </h2>
           {isLoadingRandevular && <p className="text-gray-600">Randevular yükleniyor...</p>}
-          {!isLoadingRandevular && bugunkuRandevular.length === 0 && !error && (
+          {!isLoadingRandevular && bugunkuRandevular.length === 0 && !error.includes('Bugünkü randevular yüklenemedi') && (
             <p className="text-gray-500">Bugün için planlanmış randevunuz bulunmamaktadır.</p>
           )}
           {!isLoadingRandevular && bugunkuRandevular.length > 0 && (
-            <div className="overflow-x-auto max-h-96"> {/* Kaydırma eklendi */}
+            <div className="overflow-x-auto max-h-96">
               <table className="min-w-full leading-normal">
                 <thead>
                   <tr>
@@ -154,8 +170,8 @@ const DoktorDashboardPage = () => {
           <h2 className="text-2xl font-semibold text-gray-700 mb-4">
             Aktif Acil Durumlar
           </h2>
-          {isLoadingAcilDurumlar && <p className="text-gray-600">Acil durumlar yükleniyor...</p>}
-          {!isLoadingAcilDurumlar && acilDurumlar.length === 0 && !error && (
+          {isLoadingAcilDurumlar && acilDurumlar.length === 0 && <p className="text-gray-600">Acil durumlar yükleniyor...</p>}
+          {!isLoadingAcilDurumlar && acilDurumlar.length === 0 && !error.includes('Aktif acil durumlar yüklenemedi') && (
             <p className="text-gray-500">Şu anda aktif veya müdahale edilen acil durum kaydı bulunmamaktadır.</p>
           )}
           {!isLoadingAcilDurumlar && acilDurumlar.length > 0 && (
@@ -174,7 +190,6 @@ const DoktorDashboardPage = () => {
                       Zaman: {kayit.olayZamani && isValid(parseISO(kayit.olayZamani)) ? format(parseISO(kayit.olayZamani), 'dd.MM.yyyy HH:mm', { locale: tr }) : '-'}
                   </p>
                   <p className="text-xs text-gray-500">Tetikleyen: {kayit.tetikleyenPersonelAdiSoyadi || '-'}</p>
-                  {/* Buraya acil durum detayına gitmek için bir link veya buton eklenebilir */}
                 </div>
               ))}
             </div>

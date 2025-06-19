@@ -28,12 +28,18 @@ import HastaDashboardPage from './pages/hasta/HastaDashboardPage';
 import RandevuAlPage from './pages/hasta/RandevuAlPage';
 import RandevularimPage from './pages/hasta/RandevularimPage';
 
-// DOKTOR SAYFALARI
+// Doktor sayfaları
 import DoktorDashboardPage from './pages/doktor/DoktorDashboardPage';
 import DoktorRandevularimPage from './pages/doktor/DoktorRandevularimPage';
 import DoktorMuayenePage from './pages/doktor/DoktorMuayenePage';
 import DoktorIzinTalepPage from './pages/doktor/DoktorIzinTalepPage';
-import DoktorVardiyalarimPage from './pages/doktor/DoktorVardiyalarimPage'; // <<<--- YENİ IMPORT (Vardiya)
+import DoktorVardiyalarimPage from './pages/doktor/DoktorVardiyalarimPage';
+
+// --- HEMŞİRE SAYFALARI IMPORT ---
+import HemsireDashboardPage from './pages/hemsire/HemsireDashboardPage';
+import HemsireIzinTalepPage from './pages/hemsire/HemsireIzinTalepPage';
+import HemsireVardiyalarimPage from './pages/hemsire/HemsireVardiyalarimPage'; // YENİ IMPORT EKLENDİ
+// ---------------------------------
 
 const ProtectedRoute = ({ children, requiredRole }) => {
   const { isAuthenticated, isLoading, userRoles } = useAuth();
@@ -43,10 +49,11 @@ const ProtectedRoute = ({ children, requiredRole }) => {
   if (requiredRole && !userRoles.includes(requiredRole)) {
     console.warn(`ProtectedRoute: Yetkisiz erişim denemesi. ${requiredRole} rolü gerekli. Kullanıcının rolleri: ${userRoles.join(', ')}`);
     
-    let fallbackPath = "/dashboard";
+    let fallbackPath = "/dashboard"; 
     if (userRoles.includes('ROLE_ADMIN')) fallbackPath = "/admin/dashboard";
-    else if (userRoles.includes('ROLE_HASTA')) fallbackPath = "/hasta/dashboard";
+    else if (userRoles.includes('ROLE_HEMSIRE')) fallbackPath = "/hemsire/dashboard";
     else if (userRoles.includes('ROLE_DOKTOR')) fallbackPath = "/doktor/dashboard";
+    else if (userRoles.includes('ROLE_HASTA')) fallbackPath = "/hasta/dashboard";
     
     return <Navigate to={userRoles.length > 0 ? fallbackPath : "/login"} replace />;
   }
@@ -104,8 +111,18 @@ const doktorMenuItems = [
   { name: 'Gösterge Paneli', to: '/doktor/dashboard' },
   { name: 'Randevularım', to: '/doktor/randevularim' },
   { name: 'İzin Taleplerim', to: '/doktor/izin-taleplerim' },
-  { name: 'Vardiyalarım', to: '/doktor/vardiyalarim' }, // <<<--- YENİ MENÜ ÖĞESİ (Vardiya)
+  { name: 'Vardiyalarım', to: '/doktor/vardiyalarim' },
 ];
+
+// --- HEMŞİRE MENÜ ÖĞELERİ ---
+const hemsireMenuItems = [
+  { name: 'Gösterge Paneli', to: '/hemsire/dashboard' },
+  { name: 'İzin Taleplerim', to: '/hemsire/izin-taleplerim' },
+  { name: 'Vardiyalarım', to: '/hemsire/vardiyalarim' }, // YORUM SATIRI KALDIRILDI VE EKLENDİ
+  // { name: 'Acil Durum Çağrısı', to: '/hemsire/acil-cagri' },
+];
+// -----------------------------
+
 
 function App() {
   return (
@@ -127,15 +144,19 @@ const AppRoutes = () => {
   const isAdmin = userRoles.includes('ROLE_ADMIN');
   const isHasta = userRoles.includes('ROLE_HASTA');
   const isDoktor = userRoles.includes('ROLE_DOKTOR');
+  const isHemsire = userRoles.includes('ROLE_HEMSIRE');
 
-  let defaultAuthenticatedPath = "/dashboard";
+  let defaultAuthenticatedPath = "/dashboard"; 
   if (isAdmin) {
     defaultAuthenticatedPath = "/admin/dashboard";
-  } else if (isHasta) {
-    defaultAuthenticatedPath = "/hasta/dashboard";
+  } else if (isHemsire) { 
+    defaultAuthenticatedPath = "/hemsire/dashboard";
   } else if (isDoktor) {
     defaultAuthenticatedPath = "/doktor/dashboard";
+  } else if (isHasta) {
+    defaultAuthenticatedPath = "/hasta/dashboard";
   }
+
 
   return (
     <Routes>
@@ -194,7 +215,7 @@ const AppRoutes = () => {
         <Route path="randevularim" element={<RandevularimPage />} />
       </Route>
 
-      {/* DOKTOR ROTALARI */}
+      {/* Doktor Rotaları */}
       <Route
         path="/doktor"
         element={
@@ -213,8 +234,29 @@ const AppRoutes = () => {
         <Route path="randevularim" element={<DoktorRandevularimPage />} />
         <Route path="muayene/:randevuId" element={<DoktorMuayenePage />} />
         <Route path="izin-taleplerim" element={<DoktorIzinTalepPage />} />
-        <Route path="vardiyalarim" element={<DoktorVardiyalarimPage />} /> {/* <<<--- YENİ ROTA (Vardiya) */}
+        <Route path="vardiyalarim" element={<DoktorVardiyalarimPage />} />
       </Route>
+
+      {/* --- HEMŞİRE ROTALARI --- */}
+      <Route
+        path="/hemsire"
+        element={
+          <ProtectedRoute requiredRole="ROLE_HEMSIRE">
+            <AppLayout 
+              layoutTitle="Karataş" 
+              layoutSubtitle="HEMŞİRE PANELİ" 
+              menuItems={hemsireMenuItems} 
+              requiredRole="ROLE_HEMSIRE"
+            />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<Navigate to="dashboard" replace />} />
+        <Route path="dashboard" element={<HemsireDashboardPage />} />
+        <Route path="izin-taleplerim" element={<HemsireIzinTalepPage />} />
+        <Route path="vardiyalarim" element={<HemsireVardiyalarimPage />} /> {/* YORUM SATIRI KALDIRILDI VE ROTA EKLENDİ */}
+      </Route>
+      {/* ------------------------ */}
 
       <Route path="/" element={ <Navigate to={isAuthenticated ? defaultAuthenticatedPath : "/login"} replace /> } />
       <Route path="*" element={
